@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -41,11 +41,32 @@ class SettingsIn(BaseModel):
 def put_settings(s: SettingsIn):
     for k, v in s.values.items():
         if k in ("lock_hash",): continue
+        if k.startswith("tts_") or k == "voice_rate":
+            try: tts.validate_setting(k, v, s.values)
+            except ValueError as e: bad(str(e))
         if k in ("github_token", "api_key") and v in (True, False, ""): 
             if v == "": db.set_setting(k, "")
             continue
         db.set_setting(k, v)
     return db.all_settings()
+
+# ---------- natural voice (text to speech on this machine) ----------
+@app.get("/api/tts/status")
+def tts_status(): return tts.status()
+
+class TTSIn(BaseModel):
+    text: str
+    voice: Optional[str] = None
+    speed: Optional[float] = None
+@app.post("/api/tts")
+def tts_speak(b: TTSIn):
+    voice = b.voice or db.get_setting("tts_voice")
+    speed = b.speed if b.speed is not None else (db.get_setting("voice_rate") or 1.0)
+    try: audio = tts.synth(b.text, voice, float(speed))
+    except ValueError as e: bad(str(e))
+    except httpx.HTTPError: bad("The speech server isn't running. Start it from ~/SmartWardApp/tts (see the README).", 502)
+    except RuntimeError as e: bad(str(e), 502)
+    return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
 # ---------- sources ----------
 class SourceIn(BaseModel):

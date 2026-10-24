@@ -77,6 +77,8 @@ DEFAULTS = {
     "auto_approve": False, "onboarding_completed": False,
     "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60,
     "voice_rate": 1.0, "voice_name": "", "digest_notify": False,
+    # Natural read-aloud voice (Kokoro, on this machine). engine: auto | kokoro | browser
+    "tts_engine": "auto", "tts_url": "http://127.0.0.1:8880", "tts_voice": "af_heart", "tts_profiles": {}, "tts_profile": "",
     "private_repo_local_only": True, "github_token": "", "lock_hash": "", "api_key": "",
 }
 

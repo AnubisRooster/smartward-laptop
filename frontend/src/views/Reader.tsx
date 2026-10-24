@@ -40,7 +40,8 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
           <div className="my-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Read aloud">
             {!sp.on ? <><Btn small onClick={readAll}>🔊 Read aloud</Btn><Btn small onClick={readSummary}>🔊 Summary only</Btn></> :
               <><Btn small onClick={() => sp.paused ? sp.resume() : sp.pause()}>{sp.paused ? '▶ Keep going' : '⏸ Pause'}</Btn><Btn small onClick={() => sp.skip(-1)}>⏮ Back</Btn><Btn small onClick={() => sp.skip(1)}>⏭ Skip</Btn><Btn small onClick={() => sp.stop()}>■ Stop</Btn></>}
-            <span className="text-xs text-zinc-600">System voice only — text never leaves this device.</span></div>)}
+            {sp.notice && <span className="basis-full text-xs text-amber-500">{sp.notice}</span>}
+            <span className="text-xs text-zinc-600">Read aloud on this computer — text never leaves it.</span></div>)}
 
         <Card className="my-4">
           <div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold">Summary</div>

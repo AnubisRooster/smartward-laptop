@@ -18,6 +18,21 @@ python3 -m pip install --break-system-packages litellm mcp pydantic trafilatura 
 ollama pull llama3.2:3b && ollama pull nomic-embed-text   # chat + on-device embeddings
 ```
 
+## Natural read-aloud voice
+
+Read-aloud (Reader, Today's brief and digest, chat replies) uses a natural voice, [Kokoro](https://github.com/thewh1teagle/kokoro-onnx),
+running on this laptop in `~/SmartWardApp/tts/` (CPU, about 480 MB with its model). It starts with the app
+(`start_smartward.sh`) and listens on `127.0.0.1:8880` only; article text never leaves the machine.
+If it isn't running, the browser's own voice reads instead.
+
+**Settings → Voice** lets you choose the engine (Automatic, Natural or Browser), the voice (54 voices, with a Listen button),
+the speaking rate, and **reading profiles**: named voice-and-speed combinations such as a calm evening reader and a fast commute one.
+The profile in use replaces the voice and rate above.
+
+- Start or stop it by hand: `~/SmartWardApp/tts/start.sh` / `~/SmartWardApp/tts/start.sh stop` (log: `tts/tts.log`).
+- It uses your system's espeak-ng (`libespeak-ng1`, `espeak-ng-data`).
+- The native Tauri window (`SMARTWARD_NATIVE=1`) was not rebuilt for this change; use the browser window, or rebuild it (see below).
+
 ## Models
 
 Default chat model `ollama_chat/llama3.2:3b`; override in Settings or with `SMARTWARD_MODEL`.

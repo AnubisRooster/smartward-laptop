@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { BASE, errText, get, post, put, http } from '../api';
-import { speech, useLoad } from '../hooks';
+import { useLoad } from '../hooks';
 import { Badge, Btn, Card, Err, Field, inputCls, Seg, Spin, Title } from '../ui';
+import VoiceSettings from './VoiceSettings';
 
 const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
@@ -56,12 +57,7 @@ export default function Settings() {
           <div className="pt-1"><Btn small onClick={() => post('/pipeline/run').then(reloadInfo)} disabled={p.running}>Index now</Btn></div></div>
       </Section>
 
-      <Section title="Voice" desc="Read-aloud uses your system voice, so article text never leaves this device.">
-        {speech.supported ? <><Row><span>Speaking rate {Number(v('voice_rate') || 1).toFixed(1)}×</span><input type="range" min="0.6" max="1.8" step="0.1" value={v('voice_rate') || 1} onChange={e => set('voice_rate', Number(e.target.value))} onMouseUp={() => save({ voice_rate: v('voice_rate') })} onKeyUp={() => save({ voice_rate: v('voice_rate') })} /></Row>
-          <Btn small onClick={() => speech.speak(['This is how SmartWard sounds.'], Number(v('voice_rate') || 1))}>▶ Try it</Btn>
-          <div className="text-xs text-zinc-500">Voice commands and Siri aren’t available on Linux; use the Brief me and Read aloud buttons on Today and in the reader.</div></>
-          : <div className="text-sm text-zinc-500">This window doesn’t support speech. Open SmartWard in a browser to read aloud.</div>}
-      </Section>
+      <VoiceSettings s={s} save={save} />
 
       <Lock s={s} onChanged={reload} save={save} />
 

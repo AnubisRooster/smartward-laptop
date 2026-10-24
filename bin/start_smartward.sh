@@ -7,7 +7,7 @@ export PATH="$HOME/.local/bin:$PATH"
 URL="http://localhost:8000/"
 cd "$APP_DIR" || exit 1
 
-if [ "$1" = "stop" ]; then pkill -f "$APP_DIR/smartward_api.py"; exit 0; fi
+if [ "$1" = "stop" ]; then pkill -f "$APP_DIR/smartward_api.py"; "$APP_DIR/tts/start.sh" stop; exit 0; fi
 
 # Start the API unless our own copy is already serving the UI
 if ! curl -s http://localhost:8000/status > /dev/null; then
@@ -19,6 +19,9 @@ if ! curl -s http://localhost:8000/status > /dev/null; then
     sleep 1
   done
 fi
+
+# Natural read-aloud voice (does nothing if it isn't installed or is already running)
+"$APP_DIR/tts/start.sh"
 
 if [ -n "$SMARTWARD_NATIVE" ]; then
   export GDK_BACKEND="${GDK_BACKEND:-x11}" WEBKIT_DISABLE_DMABUF_RENDERER=1
