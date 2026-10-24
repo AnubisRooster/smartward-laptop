@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+*.log
+# Built UI served by the API (rebuild with scripts/build_ui.sh)
+ui/
+# Leftovers from early prototypes and the optional native window
+chroma_db/
+smartward_knowledge.db
+resources/smartward-ui-bin/
+# Natural voice: environment, models and runtime files (see tts/setup.sh)
+tts/.venv/
+tts/*.onnx
+tts/*.bin
+tts/server.pid
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
