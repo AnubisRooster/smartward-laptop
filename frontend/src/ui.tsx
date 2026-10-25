@@ -4,7 +4,7 @@ export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Bool
 
 export function Btn({ children, onClick, kind = 'default', disabled, small, title, type = 'button', loading, label }:
   { children: ReactNode; onClick?: () => void; kind?: 'default' | 'primary' | 'danger' | 'ghost'; disabled?: boolean; small?: boolean; title?: string; type?: 'button' | 'submit'; loading?: boolean; label?: string }) {
-  const base = 'inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ' + (small ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm');
+  const base = 'inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ' + (small ? 'px-2.5 py-1 text-xs pointer-coarse:py-2' : 'px-3.5 py-2 text-sm pointer-coarse:py-2.5');
   const k = { default: 'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700', primary: 'bg-indigo-600 hover:bg-indigo-500 text-white', danger: 'bg-red-900/60 hover:bg-red-800 border border-red-800', ghost: 'hover:bg-zinc-800 text-zinc-300' }[kind];
   return <button type={type} title={title} aria-label={label} aria-busy={loading || undefined} disabled={disabled || loading} onClick={onClick} className={cx(base, k)}>{loading && <Spin />}{children}</button>;
 }

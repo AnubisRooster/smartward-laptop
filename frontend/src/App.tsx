@@ -6,7 +6,7 @@ import { FeedbackHost } from './feedback';
 import Shortcuts from './Shortcuts';
 import Palette from './Palette';
 import Links from './Links';
-import RemoteSignIn from './RemoteSignIn';
+import RemoteSignIn, { PhoneAccount } from './RemoteSignIn';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
@@ -17,6 +17,7 @@ const Settings = lazy(() => import('./views/Settings'));
 import Onboarding from './views/Onboarding';
 import { onDesktopEvent } from './desktop';
 
+const onPhone = typeof location !== 'undefined' && location.protocol === 'https:' && !/^(localhost|127\.)/.test(location.hostname);   // reached over the private network, not the laptop's own window
 const TABS: [Tab, string, typeof Sun][] = [['today', 'Today', Sun], ['reading', 'Reading', Newspaper], ['graph', 'Graph', Share2], ['chat', 'Chat', MessageSquare], ['projects', 'Projects', FolderKanban]];
 
 function LockScreen({ onUnlock }: { onUnlock: () => void }) {
@@ -84,9 +85,9 @@ export default function App() {
   if (needSignIn) return <RemoteSignIn onDone={() => { setNeedSignIn(false); reload(); }} />;
   if (!st) {
     return <><div className="flex h-full items-center justify-center p-8 text-center" role={error ? 'alert' : 'status'}>
-      <div><div className="mb-2 text-lg">{error ? 'SmartWard’s backend isn’t running' : 'Starting…'}</div>
+      <div><div className="mb-2 text-lg">{error ? (onPhone ? 'Can’t reach your laptop' : 'SmartWard’s backend isn’t running') : 'Starting…'}</div>
         {error && <>
-          <div className="mb-3 text-sm text-zinc-500">SmartWard normally restarts it by itself. If this stays, quit SmartWard from the tray icon and open it again.<br />The log is in <code className="rounded bg-zinc-800 px-1">~/.local/state/smartward/api.log</code>.</div>
+          <div className="mb-3 text-sm text-zinc-500">{onPhone ? <>Your laptop may be asleep, offline, or SmartWard may not be running. Check that it’s on and that Tailscale is connected on both devices, then try again.</> : <>SmartWard normally restarts it by itself. If this stays, quit SmartWard from the tray icon and open it again.<br />The log is in <code className="rounded bg-zinc-800 px-1">~/.local/state/smartward/api.log</code>.</>}</div>
           <button onClick={() => reload()} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">Try again</button></>}</div></div><FeedbackHost /></>;
   }
   if (lockOn && locked) return <><LockScreen onUnlock={() => { try { sessionStorage.setItem('sw.unlocked', '1'); } catch {} setLocked(false); }} /><FeedbackHost /></>;
@@ -94,7 +95,7 @@ export default function App() {
 
   const p = st.pipeline;
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const Body = { today: Today, reading: Reading, graph: GraphView, chat: Chat, projects: Projects, settings: Settings }[tab];
+  const Body = { today: Today, reading: Reading, graph: GraphView, chat: Chat, projects: Projects, settings: onPhone ? PhoneAccount : Settings }[tab];
   const navBtn = (active: boolean, label: string, Icon: typeof Sun, onClick: () => void, extra?: string) => (
     <button key={label} onClick={onClick} aria-current={active ? 'page' : undefined} title={rail ? label : undefined} aria-label={rail ? label : undefined}
       className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] md:flex-none md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm', rail && 'md:justify-center md:px-0', active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200', extra)}>
@@ -102,7 +103,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <nav className={cx('flex shrink-0 gap-0.5 border-b border-zinc-800 bg-zinc-950 p-1.5 md:flex-col md:gap-1 md:border-b-0 md:border-r md:p-3', rail ? 'md:w-16 md:px-2' : 'md:w-48')} aria-label="Main">
+      <nav className={cx('order-2 flex shrink-0 gap-0.5 border-t border-zinc-800 bg-zinc-950 p-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] md:order-none md:flex-col md:gap-1 md:border-t-0 md:border-r md:p-3', rail ? 'md:w-16 md:px-2' : 'md:w-48')} aria-label="Main">
         <div className={cx('hidden px-2 pb-3 pt-1 md:block', rail && 'md:hidden')}><div className="text-lg font-semibold">SmartWard</div><div className="text-xs text-zinc-500">Local research strategist</div></div>
         {TABS.map(([id, label, Icon]) => navBtn(tab === id && !(id === 'reading' && sources), label, Icon, () => go(id)))}
         {navBtn(tab === 'reading' && sources, 'Sources', Rss, () => go('reading', { sources: true, articleId: null }))}
@@ -111,7 +112,7 @@ export default function App() {
         {lockOn && <button onClick={lockNow} title="Lock SmartWard" aria-label="Lock SmartWard" className={cx('hidden items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-900 md:flex', rail && 'md:justify-center md:px-0')}><Lock size={16} aria-hidden /><span className={cx(rail && 'md:hidden')}>Lock</span></button>}
         <button onClick={toggleRail} title={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand sidebar' : 'Collapse sidebar'} className={cx('hidden items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-900 hover:text-zinc-300 md:flex', rail && 'md:justify-center md:px-0')}>{rail ? <PanelLeftOpen size={16} aria-hidden /> : <PanelLeftClose size={16} aria-hidden />}<span className={cx(rail && 'md:hidden')}>Collapse</span></button>
       </nav>
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <main className="order-1 flex min-h-0 min-w-0 flex-1 flex-col md:order-none">
         {p.running && tab !== 'reading' && (
           <div className="border-b border-zinc-800 bg-zinc-900/60 px-4 py-2"><Progress value={pct} label={`${p.step || 'Working'}… ${p.total ? `${p.done} of ${p.total}` : ''}`} /></div>)}
         {stale && <div role="status" className="flex items-center justify-between gap-3 border-b border-indigo-800 bg-indigo-950/40 px-4 py-2 text-sm">SmartWard was updated. <button className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500" onClick={() => location.reload()}>Reload to use the new version</button></div>}
