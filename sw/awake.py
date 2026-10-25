@@ -10,7 +10,9 @@ _proc = None
 def command():
     if os.environ.get("SMARTWARD_INHIBIT_CMD"): return os.environ["SMARTWARD_INHIBIT_CMD"].split()
     exe = shutil.which("systemd-inhibit")
-    return [exe, "--what=sleep:idle", "--who=SmartWard", "--why=Remote access is on", "--mode=block", "sleep", "infinity"] if exe else None
+    # The lock is held by a process that ends when THIS program does (tail --pid), so a crash, a kill or a restart can never leave a "don't sleep" lock behind.
+    follow = ["tail", f"--pid={os.getpid()}", "-f", "/dev/null"] if shutil.which("tail") else ["sleep", "infinity"]
+    return [exe, "--what=sleep:idle", "--who=SmartWard", "--why=Remote access is on", "--mode=block", *follow] if exe else None
 
 
 def running():

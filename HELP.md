@@ -150,6 +150,24 @@ What to know:
 - Talking from the phone uses the phone's microphone; the laptop's Whisper turns it into text. Nothing goes to Apple or Google.
 - The laptop must be awake. **Keep this laptop awake while remote access is on** (in the same card) stops it sleeping when idle, but closing the lid still suspends it.
 
+### Keeping phone access working for the long term
+
+Most losses of access come from the laptop, not the phone. Work through this once:
+
+1. **Tailscale and Ollama start by themselves at boot** on Ubuntu. Check with `systemctl is-enabled tailscaled ollama` (both should say `enabled`). The `tailscale serve` setting also survives reboots.
+2. **Start SmartWard at login.** In SmartWard, open Settings → Desktop and tick **Start SmartWard when I log in**. It starts hidden in the tray. Without this, SmartWard is not running after a restart until you open it. To have the laptop come back by itself after a power cut, also turn on automatic login (Settings → System → Users); that means anyone who powers it on gets your desktop, so lock the screen or skip this if that worries you.
+3. **Don't let the laptop sleep.** "Keep this laptop awake while remote access is on" (Settings → Remote access) stops it sleeping when idle, on battery too. It cannot stop the **lid** from suspending it. If you want phone access with the lid closed while plugged in, tell the system to ignore the lid on power:
+
+```bash
+gsettings set org.gnome.settings-daemon.plugins.power lid-close-ac-action 'nothing'
+```
+
+   (Undo with `'suspend'`. A closed laptop in a bag can get hot, so only do this on a desk.) Keep it plugged in: on battery it still suspends or hibernates when the battery runs very low.
+4. **Turn off key expiry for this laptop.** Tailscale devices must sign in again after a set time (about six months), and the laptop drops off your private network when the key expires. In the Tailscale admin page (login.tailscale.com → Machines), open the menu on this laptop and choose **Disable key expiry**. `tailscale status --json` shows the current expiry in `Self.KeyExpiry`.
+5. **On the phone,** let Tailscale run in the background: on Android turn on Always-on VPN for Tailscale (Settings → Network → VPN) and exempt it from battery optimisation; on iPhone keep Background App Refresh on and use Tailscale's on-demand option if your version has one. A phone that has dropped off Tailscale shows "Can't reach your laptop".
+
+**If the phone drops in the middle of a session:** answers are written on the laptop and saved as they stream, so when the phone reconnects the finished answer is there; nothing is lost. A hands-free conversation stops when the phone drops, and you press the microphone again. Staying signed in is separate from the connection: a phone stays signed in for 30 days after you last use it.
+
 ## Updating
 
 ```bash
@@ -182,6 +200,7 @@ Then quit SmartWard from its tray icon and open it again. An open window shows a
 | No natural voice | Check Settings → Voice. Install it with `tts/setup.sh` and `sudo apt install libespeak-ng1 espeak-ng-data`. |
 | Hands-free stays open for a long time | Usually the room: a fan or music that came on while you were quiet. It now lets go within a few seconds, but a very noisy room still confuses it; quiet the noise or move the microphone. |
 | Hands-free says speech input isn't installed | Run `~/SmartWardApp/stt/setup.sh` and `sudo apt install alsa-utils`. |
+| The phone worked, then stopped | The laptop slept (lid closed?), Tailscale dropped on the phone or the laptop, or the laptop's Tailscale key expired. See *Keeping phone access working for the long term*. |
 | The phone can't connect | Is the laptop awake and SmartWard running? Tailscale connected on both? `tailscale serve status` should show 127.0.0.1:8000. |
 | "This Tailscale account isn't allowed" | The login in Settings → Remote access must be the account your phone uses. |
 | The tray icon is missing | GNOME needs its "AppIndicator" extension (on by default in Ubuntu). |

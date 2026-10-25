@@ -52,5 +52,16 @@ class TailscaleTests(unittest.TestCase):
         awake.release()
 
 
+class InhibitorDiesWithTheProgram(unittest.TestCase):
+    """A "don't sleep" lock must never outlive the program that asked for it (it used to, after a crash or restart)."""
+    def test_the_lock_is_held_by_a_process_that_follows_this_program(self):
+        old = os.environ.pop("SMARTWARD_INHIBIT_CMD", None)
+        try:
+            cmd = awake.command()
+            if cmd: self.assertIn(f"--pid={os.getpid()}", cmd); self.assertNotIn("infinity", cmd)
+        finally:
+            if old is not None: os.environ["SMARTWARD_INHIBIT_CMD"] = old
+
+
 if __name__ == "__main__":
     unittest.main()
