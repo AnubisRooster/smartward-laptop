@@ -68,6 +68,9 @@ def put_settings(s: SettingsIn):
         if k.startswith("tts_") or k == "voice_rate":
             try: tts.validate_setting(k, v, s.values)
             except ValueError as e: bad(str(e))
+        if k in ("lock_after", "lock_idle"):
+            hi = 86400 if k == "lock_after" else 1440
+            if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= hi: bad(f"Use a whole number from 0 to {hi}.")
         if k in ("github_token", "api_key") and v in (True, False, ""): 
             if v == "": db.set_setting(k, "")
             continue

@@ -75,7 +75,7 @@ DEFAULTS = {
     "ollama_base": os.environ.get("OLLAMA_API_BASE", "http://localhost:11434"),
     "interests": "", "strictness": "balanced", "daily_budget": 1.0,
     "auto_approve": False, "onboarding_completed": False,
-    "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60,
+    "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60, "lock_idle": 15,
     "voice_rate": 1.0, "voice_name": "", "digest_notify": False,
     "cloud_scope": "chat", "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True,
     # Natural read-aloud voice (Kokoro, on this machine). engine: auto | kokoro | browser

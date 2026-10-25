@@ -75,7 +75,7 @@ Sources (RSS, arXiv, Hugging Face papers, Hacker News, GitHub releases, watched 
 conditional GET, dedupe, failure help) · knowledge graph (themes, aliases, rename/merge/split, decay) ·
 GraphRAG chat with citations (brainstorm, critique, research plan, weekly review) with approval cards ·
 Projects (brief with diff suggestions + history, decisions/questions/actions, links, GitHub docs sync, related reading) ·
-onboarding · cost controls · export (JSON, GraphML, Markdown) · encrypted backup/restore · PIN app lock.
+onboarding · cost controls · export (JSON, GraphML, Markdown) · encrypted backup/restore · PIN app lock (locks when you leave the window and after 15 idle minutes by default; scrolling, mouse movement, hands-free talking and waiting for an answer all count as activity, so it never locks under you).
 
 ## Not carried over (needs Apple platform features)
 

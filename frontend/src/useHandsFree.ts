@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { errText, get, post } from './api';
 import { speech, useSpeech } from './hooks';
 import { toast } from './feedback';
+import { touch } from './activity';
 import { parseVoice, plainForSpeech } from './voiceInput';
 import { takeAudioChat } from './voiceIntent';
 import { BrowserMic } from './browserMic';
@@ -61,7 +62,7 @@ export function useHandsFree(a: Args) {
     })();
     const timer = setInterval(async () => {
       try {
-        const r = await get('/voice/poll', { after: cursor.current });
+        const r = await get('/voice/poll', { after: cursor.current }); touch();       // listening is use
         if (!alive) return;
         cursor.current = r.seq; setServer(r.ready ? r.state : 'loading');
         if (r.error) { setError(r.error); setOn(false); return; }

@@ -113,7 +113,7 @@ The voice server starts with the app and listens on `127.0.0.1:8880` only. If it
 ## Your data and privacy
 
 - Everything is in a SQLite database: `~/.local/share/smartward/smartward.db`. Logs: `~/.local/state/smartward/api.log`.
-- **Settings → App lock**: a PIN covers the whole app on launch and after you have been away. (The PIN is stored as a salted hash.)
+- **Settings → App lock**: a PIN covers the whole app on launch, after you have left the window for a while (default 1 minute) and after a spell with no activity (default 15 minutes, or never). Typing, clicking, scrolling, moving the mouse, hands-free talking and waiting for an answer all count as activity, so it does not lock while you are using it. (The PIN is stored as a salted hash.)
 - **Settings → Export**: your library as JSON, the graph as GraphML (opens in Gephi or yEd), projects as Markdown.
 - **Settings → Backup & restore**: the whole library as one encrypted file (needs a passphrase of 8+ characters; keep it, it cannot be recovered). API keys, the GitHub token and the app lock are never included.
 - **Settings → GitHub**: only needed for private repositories. Paste a read-only personal access token; SmartWard never writes to GitHub. You type the token yourself in Settings; it is stored on this computer only.
@@ -164,6 +164,7 @@ Then quit SmartWard from its tray icon and open it again. An open window shows a
 
 | What you see | What to do |
 | --- | --- |
+| It locks while I'm using it | Settings → App lock: raise **Lock after no activity** (or choose Never) and **Lock after leaving the window**. Reading without touching anything still counts as idle after that time. |
 | "Ollama isn't running" | Start it: `ollama serve` (or `sudo systemctl start ollama`). |
 | Chat or summaries fail | `ollama pull llama3.2:3b`, then use the model test in Settings → Model. |
 | Search finds only exact words | Install the embedding model: `ollama pull nomic-embed-text`. |

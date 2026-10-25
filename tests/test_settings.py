@@ -4,6 +4,17 @@ from tests import helpers as h
 c = h.client
 
 
+class LockTimerTests(unittest.TestCase):
+    def setUp(self): h.reset()
+
+    def test_away_and_idle_are_separate_validated_numbers_with_a_calmer_idle_default(self):
+        s = c.get("/api/settings").json(); self.assertEqual((s["lock_after"], s["lock_idle"]), (60, 15))
+        for bad in ({"lock_after": -1}, {"lock_after": 90000}, {"lock_idle": -1}, {"lock_idle": 5000}, {"lock_idle": "10"}, {"lock_idle": True}, {"lock_after": 30.5}):
+            self.assertEqual(c.put("/api/settings", json={"values": bad}).status_code, 400, bad)
+        self.assertEqual(c.put("/api/settings", json={"values": {"lock_after": 0, "lock_idle": 0}}).status_code, 200)       # "immediately" and "never" are both real choices
+        s = c.get("/api/settings").json(); self.assertEqual((s["lock_after"], s["lock_idle"]), (0, 0))
+
+
 class SettingsTests(unittest.TestCase):
     def setUp(self): h.reset()
 

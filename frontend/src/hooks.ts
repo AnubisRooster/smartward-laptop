@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { get, http } from './api';
 import { HOME, Place, Tab, hashFor, parseHash } from './nav';
+import { touch } from './activity';
 
 export type { Tab } from './nav';
 
@@ -91,7 +92,7 @@ export const speech = {
   listeners: new Set<() => void>(),
   token: 0, flat: [] as { part: number; text: string }[], cursor: 0,
   audio: null as HTMLAudioElement | null, el: null as HTMLAudioElement | null, clips: new Map<number, Promise<string>>(), aborts: new Set<AbortController>(), cfg: null as SpeechConfig | null,
-  notify() { speech.listeners.forEach(f => f()); },
+  notify() { if (speech.on) touch(); speech.listeners.forEach(f => f()); },
 
   /** Settings + whether the natural voice is up decide which voice speaks. */
   async resolve(rateHint: number, voiceHint: string): Promise<SpeechConfig> {

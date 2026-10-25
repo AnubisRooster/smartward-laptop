@@ -6,6 +6,7 @@ import { speech, useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Modal, Field, inputCls, Spin, cx } from '../ui';
 import { ask, toast } from '../feedback';
 import { useHandsFree } from '../useHandsFree';
+import { touch } from '../activity';
 import { wantAudioChat } from '../voiceIntent';
 import { Mic } from 'lucide-react';
 
@@ -91,6 +92,7 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
   const { data: st } = useLoad<any>('/status');
   const running = c?.status === 'running';
   useEffect(() => { setFast(!!running); }, [running]);
+  useEffect(() => { if (!running) return; touch(); const t = setInterval(touch, 5000); return () => clearInterval(t); }, [running]);       // waiting for an answer is use
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [c?.messages?.length, c?.messages?.[c?.messages?.length - 1]?.content]);
   const sendText = async (t: string) => { if (!t) return; setText(''); setErr(''); setFast(true); try { await post(`/conversations/${id}/send`, { text: t }); reload(); onChanged(); } catch (e) { setErr(errText(e)); setText(t); } };
   const send = () => sendText(text.trim());
