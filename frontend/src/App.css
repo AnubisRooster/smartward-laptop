@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@import "./theme.css";
 
-html, body, #root { height: 100%; margin: 0; background: #09090b; color: #e4e4e7; }
+html, body, #root { height: 100%; margin: 0; background: var(--color-zinc-950); color: var(--color-zinc-200); }
 body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 6px; } ::-webkit-scrollbar-track { background: transparent; }
-.prose-sw p { margin: 0 0 .9em; line-height: 1.7; } .prose-sw { font-size: 15px; color: #d4d4d8; }
+::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-thumb { background: var(--color-zinc-700); border-radius: 6px; } ::-webkit-scrollbar-track { background: transparent; }
+.prose-sw p { margin: 0 0 .9em; line-height: 1.7; } .prose-sw { font-size: 15px; color: var(--color-zinc-300); }
 .speaking { background: rgba(99,102,241,.18); border-radius: 6px; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #818cf8; outline-offset: 1px; }

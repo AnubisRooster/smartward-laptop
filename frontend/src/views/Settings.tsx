@@ -5,9 +5,10 @@ import { Badge, Btn, Card, Err, Field, inputCls, Seg, Spin, Title } from '../ui'
 import { ask, toast } from '../feedback';
 import VoiceSettings from './VoiceSettings';
 import DesktopSettings from './DesktopSettings';
+import { readPref, setPref, ThemePref } from '../theme';
 
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
-const SECTIONS = ['Model', 'Interests & relevance', 'Usage & budget', 'Background refresh', 'Voice', 'Desktop', 'App lock', 'GitHub', 'Export', 'Backup & restore', 'Developer'];
+const SECTIONS = ['Appearance', 'Model', 'Interests & relevance', 'Usage & budget', 'Background refresh', 'Voice', 'Desktop', 'App lock', 'GitHub', 'Export', 'Backup & restore', 'Developer'];
 const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div id={slug(title)} className="scroll-mt-16"><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
 const money = (n: number) => '$' + (n || 0).toFixed(n < 1 ? 3 : 2);
@@ -29,6 +30,8 @@ export default function Settings() {
     <div className="h-full overflow-y-auto"><div className="mx-auto max-w-2xl space-y-4 p-5">
       <Title right={<span className="text-xs text-emerald-400" role="status">{msg}</span>}>Settings</Title><Err>{err}</Err>
       <nav aria-label="Settings sections" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 bg-zinc-950/90 px-1 py-2 backdrop-blur">{SECTIONS.map(t => <a key={t} href={'#' + slug(t)} onClick={e => { e.preventDefault(); document.getElementById(slug(t))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="rounded-full border border-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100">{t}</a>)}</nav>
+
+      <Appearance />
 
       <Section title="Model" desc="SmartWard runs on a local Ollama model. You can instead bring your own key for a cloud model.">
         <Field label="Chat model"><div className="flex gap-2"><select className={inputCls} value={(models?.ollama || []).some((m: string) => 'ollama_chat/' + m === v('model')) ? v('model') : '__custom'} onChange={e => e.target.value !== '__custom' && save({ model: e.target.value })}>
@@ -134,6 +137,15 @@ function Backup() {
       <div className="flex gap-2"><Btn onClick={doBackup} disabled={busy || pw.length < 8}>{busy ? <Spin /> : '⬇'} Back up</Btn><Btn onClick={() => file.current?.click()} disabled={busy || pw.length < 8}>⬆ Restore from file…</Btn>
         <input ref={file} type="file" accept=".swbk" hidden onChange={e => { const f = e.target.files?.[0]; if (f) doRestore(f); e.target.value = ''; }} /></div>
       <div className="text-xs text-zinc-500">A wrong passphrase or a damaged file never changes anything.</div>
+    </Section>
+  );
+}
+
+function Appearance() {
+  const [pref, setP] = useState<ThemePref>(readPref());
+  return (
+    <Section title="Appearance" desc="Follow your computer’s light or dark setting, or pick one.">
+      <Row><span>Theme</span><Seg value={pref} onChange={(x: string) => { setP(x as ThemePref); setPref(x as ThemePref); }} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} /></Row>
     </Section>
   );
 }

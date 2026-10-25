@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { get, patch, post, errText, ago } from '../api';
 import { useLoad, useNav } from '../hooks';
+import { step, isTyping } from '../shortcuts';
 import { Badge, Btn, Empty, Err, Progress, Seg, cx } from '../ui';
 import { toast } from '../feedback';
 import Reader from './Reader';
@@ -50,6 +51,20 @@ export default function Reading() {
     try { await post('/articles/mark-read', { ids }); reload(); toast.ok(`Marked ${ids.length} as read.`, async () => { await post('/articles/mark-read', { ids, read: false }); reload(); }); }
     catch (e) { toast.error(errText(e)); }
   };
+
+  // j/k move through the list, s stars and u marks the open article unread.
+  const itemsRef = useRef<any[]>([]); itemsRef.current = data?.items || [];
+  const starRef = useRef(star); starRef.current = star;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (sources || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement) || document.querySelector('[role="dialog"]')) return;
+      const list = itemsRef.current; const open = articleId;
+      if (e.key === 'j' || e.key === 'k') { const n = step(list.map(x => x.id), open, e.key === 'j' ? 1 : -1); if (n != null) { e.preventDefault(); openArticle(n); document.querySelector(`[data-article-id="${n}"]`)?.scrollIntoView({ block: 'nearest' }); } }
+      else if (e.key === 's' && open != null) { const a = list.find(x => x.id === open); if (a) { e.preventDefault(); starRef.current(a); } }
+      else if (e.key === 'u' && open != null) { e.preventDefault(); post('/articles/mark-read', { ids: [open], read: false }).then(() => { reload(); toast.ok('Marked unread'); }).catch(err => toast.error(errText(err))); }
+    };
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
+  }, [articleId, sources]);
 
   if (sources) return <Sources onClose={() => go('reading', { sources: false })} />;
   const items: any[] = data?.items || [];

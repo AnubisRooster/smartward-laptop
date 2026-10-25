@@ -3,6 +3,7 @@ import { get, post } from './api';
 import { Tab, useHashSync, useLoad, useNav, speech } from './hooks';
 import { Progress, Spin, cx } from './ui';
 import { FeedbackHost } from './feedback';
+import Shortcuts from './Shortcuts';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
@@ -86,7 +87,7 @@ export default function App() {
   const Body = { today: Today, reading: Reading, graph: GraphView, chat: Chat, projects: Projects, settings: Settings }[tab];
   const navBtn = (active: boolean, label: string, Icon: typeof Sun, onClick: () => void, extra?: string) => (
     <button key={label} onClick={onClick} aria-current={active ? 'page' : undefined} title={rail ? label : undefined} aria-label={rail ? label : undefined}
-      className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] md:flex-none md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm', rail && 'md:justify-center md:px-0', active ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200', extra)}>
+      className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] md:flex-none md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm', rail && 'md:justify-center md:px-0', active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200', extra)}>
       <Icon size={16} aria-hidden className="shrink-0" /><span className={cx(rail && 'md:hidden')}>{label}</span></button>);
 
   return (
@@ -105,6 +106,7 @@ export default function App() {
           <div className="border-b border-zinc-800 bg-zinc-900/60 px-4 py-2"><Progress value={pct} label={`${p.step || 'Working'}… ${p.total ? `${p.done} of ${p.total}` : ''}`} /></div>)}
         <div className="min-h-0 flex-1 overflow-hidden"><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></div>
       </main>
+      <Shortcuts />
       <FeedbackHost />
     </div>
   );

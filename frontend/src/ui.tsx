@@ -56,7 +56,7 @@ export const Field = ({ label, children, hint }: { label: string; children: Reac
 export const inputCls = 'w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-indigo-500';
 export const Seg = ({ value, options, onChange, label }: { value: string; options: [string, string][]; onChange: (v: string) => void; label?: string }) => (
   <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-0.5">{options.map(([v, l]) =>
-    <button key={v} role="radio" aria-checked={value === v} onClick={() => onChange(v)} className={cx('rounded-md px-3 py-1 text-xs', value === v ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200')}>{l}</button>)}</div>
+    <button key={v} role="radio" aria-checked={value === v} onClick={() => onChange(v)} className={cx('rounded-md px-3 py-1 text-xs', value === v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{l}</button>)}</div>
 );
 export const Title = ({ children, right }: { children: ReactNode; right?: ReactNode }) =>
   <div className="mb-4 flex items-center justify-between"><h1 className="text-xl font-semibold">{children}</h1><div className="flex items-center gap-2">{right}</div></div>;

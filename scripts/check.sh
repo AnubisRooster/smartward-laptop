@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs every check before you trust a change.
-#   scripts/check.sh           Python tests, shell syntax, front end type check
+#   scripts/check.sh           Python tests, shell syntax, front end type check and tests
 #   scripts/check.sh --build   ... and rebuild the UI the API serves (ui/)
 #   scripts/check.sh --native  ... and `cargo check` the native shell (frontend/src-tauri)
 set -e
@@ -15,6 +15,9 @@ for f in bin/*.sh scripts/*.sh tts/*.sh; do bash -n "$f" && echo "ok $f"; done
 echo "== Front end type check"
 [ -d frontend/node_modules ] || (cd frontend && npm ci)
 (cd frontend && npx tsc --noEmit) && echo "ok"
+
+echo "== Front end tests"
+(cd frontend && npx vitest run --reporter=dot)
 
 if [ "$1" = "--build" ]; then scripts/build_ui.sh; fi
 if [ "$1" = "--native" ]; then echo "== Native shell"; (cd frontend/src-tauri && . "$HOME/.cargo/env" && cargo check --quiet) && echo "ok"; fi

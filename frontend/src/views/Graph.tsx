@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { errText, get, post } from '../api';
 import { useLoad, useNav } from '../hooks';
+import { isLight } from '../theme';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Seg, Title, cx } from '../ui';
 
 const COLORS: Record<string, string> = { model: '#a78bfa', tool: '#34d399', library: '#22d3ee', company: '#fbbf24', person: '#f472b6', concept: '#818cf8', technique: '#fb923c', benchmark: '#f87171', paper: '#60a5fa', project: '#a3e635', other: '#a1a1aa' };
@@ -52,8 +53,8 @@ export default function GraphView() {
               linkColor={() => 'rgba(113,113,122,.5)'} linkWidth={(l: any) => Math.min(4, l.w)}
               nodeCanvasObject={(n: any, ctx: CanvasRenderingContext2D, k: number) => {
                 const r = 3 + n.strength * 2; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.fillStyle = COLORS[n.type] || COLORS.other; ctx.globalAlpha = n.dormant ? 0.35 : 1; ctx.fill();
-                if (n.id === sel) { ctx.lineWidth = 1.5 / k; ctx.strokeStyle = '#fff'; ctx.stroke(); }
-                ctx.globalAlpha = 1; if (k < 0.8 && n.strength < 2 && n.id !== sel) return; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k);
+                if (n.id === sel) { ctx.lineWidth = 1.5 / k; ctx.strokeStyle = isLight() ? '#000' : '#fff'; ctx.stroke(); }
+                ctx.globalAlpha = 1; if (k < 0.8 && n.strength < 2 && n.id !== sel) return; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = isLight() ? '#27272a' : '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k);
               }} />
           ) : (
             <ul className="h-full overflow-y-auto" aria-label="Themes">{themes.map(t => (
@@ -81,7 +82,7 @@ function ThemeDetail({ id, onClose, onChanged, openArticle }: { id: number; onCl
       <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Connections</h3>
       {t.connections.length === 0 ? <div className="mb-3 text-sm text-zinc-500">None yet.</div> : <ul className="mb-3 space-y-1">{t.connections.map((c: any, i: number) => <li key={i} className="text-sm"><button className="text-indigo-300 hover:underline" onClick={() => go('graph', { themeId: c.id })}>{c.name}</button> <span className="text-xs text-zinc-500">{c.relation} ×{c.n}</span></li>)}</ul>}
       <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Where it came up</h3>
-      <ul className="space-y-1">{t.articles.map((a: any) => <li key={a.id}><button className="text-left text-sm text-zinc-300 hover:text-white hover:underline" onClick={() => openArticle(a.id)}>{a.title}</button></li>)}</ul>
+      <ul className="space-y-1">{t.articles.map((a: any) => <li key={a.id}><button className="text-left text-sm text-zinc-300 hover:text-zinc-50 hover:underline" onClick={() => openArticle(a.id)}>{a.title}</button></li>)}</ul>
       {dlg && <ThemeDialog kind={dlg} t={t} onClose={() => setDlg('')} onDone={(newId?: number) => { setDlg(''); onChanged(); if (newId && newId !== id) go('graph', { themeId: newId }); else reload(); }} />}
     </aside>
   );

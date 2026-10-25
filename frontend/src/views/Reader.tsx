@@ -42,7 +42,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
   return (
     <article className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl px-5 py-4">
-        <div className="mb-3 flex items-center justify-between"><button className="text-sm text-zinc-400 hover:text-white md:hidden" onClick={onBack}>← Back</button><span className="hidden md:block" />
+        <div className="mb-3 flex items-center justify-between"><button className="text-sm text-zinc-400 hover:text-zinc-50 md:hidden" onClick={onBack}>← Back</button><span className="hidden md:block" />
           <div className="flex gap-1.5">
             <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { starred: !a.starred }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.starred ? '★ Starred' : '☆ Star'}</Btn>
             <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { read: !a.read }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.read ? 'Mark unread' : 'Mark read'}</Btn>
