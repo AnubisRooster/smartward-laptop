@@ -11,16 +11,16 @@ export type VadEvent = { type: 'start' } | { type: 'end'; audio: Float32Array | 
 
 export class Endpointer {
   private silenceFrames: number; private minSpeechFrames: number; private maxFrames: number; private margin: number; private absMin: number; private floorMin: number; private prerollMax: number;
-  private floor: number; private recent: number[] = []; private preroll: Float32Array[] = [];
+  private floor: number; private flat: number; private recent: number[] = []; private levels: number[] = []; private preroll: Float32Array[] = [];
   private active = false; private audio: Float32Array[] = []; private quiet = 0; private loudRun = 0; private speechFrames = 0;
 
-  constructor(o: { silenceMs?: number; minSpeechMs?: number; maxS?: number; marginDb?: number; floorMinDb?: number; absMinDb?: number; prerollMs?: number } = {}) {
+  constructor(o: { silenceMs?: number; minSpeechMs?: number; maxS?: number; marginDb?: number; floorMinDb?: number; absMinDb?: number; prerollMs?: number; flatDb?: number } = {}) {
     this.silenceFrames = Math.floor((o.silenceMs ?? 800) / 20); this.minSpeechFrames = Math.floor((o.minSpeechMs ?? 300) / 20); this.maxFrames = Math.floor((o.maxS ?? 30) * 50);
     this.margin = o.marginDb ?? 11; this.absMin = o.absMinDb ?? -48; this.floorMin = o.floorMinDb ?? -60; this.prerollMax = Math.floor((o.prerollMs ?? 300) / 20);
-    this.floor = Math.max(this.floorMin, -55);
+    this.floor = Math.max(this.floorMin, -55); this.flat = o.flatDb ?? 6;
   }
 
-  reset() { this.active = false; this.audio = []; this.quiet = 0; this.loudRun = 0; this.speechFrames = 0; this.preroll = []; }
+  reset() { this.active = false; this.audio = []; this.quiet = 0; this.loudRun = 0; this.speechFrames = 0; this.preroll = []; this.levels = []; }
   get hearing() { return this.active; }
   threshold() { return Math.max(this.floor + this.margin, this.absMin); }
 
@@ -36,7 +36,14 @@ export class Endpointer {
       if (this.loudRun >= 3) { this.active = true; this.audio = [...this.preroll]; this.quiet = 0; this.speechFrames = this.loudRun; return { type: 'start' }; }
       return null;
     }
-    this.audio.push(frame);
+    this.audio.push(frame); this.levels.push(db); if (this.levels.length > 100) this.levels.shift();
+    // A room that got noisier (a fan, music) sits above the threshold learned in the quiet and would hold the microphone open to the limit. Speech is never flat; steady noise is.
+    if (loud && this.levels.length === 100 && Math.max(...this.levels) - Math.min(...this.levels) < this.flat) {
+      const before = this.audio.slice(0, -100); const enough = this.speechFrames - 100 >= this.minSpeechFrames;     // what came before the noise may be real speech
+      this.floor = Math.max(this.floorMin, this.levels.reduce((a, b) => a + b, 0) / this.levels.length); this.recent = []; this.reset();
+      if (!enough || !before.length) return { type: 'end', audio: null };
+      const out = new Float32Array(before.length * FRAME); before.forEach((p, i) => out.set(p, i * FRAME)); return { type: 'end', audio: out };
+    }
     if (loud) { this.quiet = 0; this.speechFrames++; } else this.quiet++;
     if (this.quiet >= this.silenceFrames || this.audio.length >= this.maxFrames) {
       const enough = this.speechFrames >= this.minSpeechFrames; const parts = this.audio; this.reset();

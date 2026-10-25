@@ -65,6 +65,38 @@ def run(ep, frs):
     return ev
 
 
+class NoisyRoomTests(unittest.TestCase):
+    """A fan that comes on (or music) sits above the level learned in the quiet; it must not hold the microphone open for 30 seconds."""
+    def feed_all(self, ep, frs):
+        out = []
+        for i, f in enumerate(frs):
+            e = ep.feed(f)
+            if e: out.append((i / 50, e[0], None if e[1] is None else len(e[1]) / 16000))
+        return out
+
+    def test_a_fan_coming_on_ends_within_a_few_seconds_and_then_counts_as_the_room(self):
+        ev = self.feed_all(Endpointer(), frames(2, 8) + frames(40, 300))
+        self.assertEqual([e[1] for e in ev], ["start", "end"]); self.assertIsNone(ev[1][2]); self.assertLess(ev[1][0], 6)      # it used to run to the 30 s limit
+
+    def test_speech_over_the_fan_is_still_heard_and_kept(self):
+        t = np.arange(16000 * 4) / 16000; speech = (np.random.randn(len(t)) * (800 + 3000 * np.abs(np.sin(t * 7)))).astype(np.int16)         # moves by many dB, like speech
+        sig = np.concatenate([np.concatenate(frames(2, 8)), np.clip(speech.astype(np.int32) + (np.random.randn(len(t)) * 300).astype(np.int32), -32768, 32767).astype(np.int16), np.concatenate(frames(4, 300))])
+        ep = Endpointer(); ev = []
+        for i in range(0, len(sig) - FRAME + 1, FRAME):
+            e = ep.feed(sig[i:i + FRAME])
+            if e: ev.append(e)
+        heard = [e for e in ev if e[0] == "end" and e[1] is not None]
+        self.assertEqual(len(heard), 1); self.assertGreater(len(heard[0][1]) / 16000, 3)
+
+    def test_ordinary_speech_that_moves_in_level_is_not_mistaken_for_noise(self):
+        t = np.arange(16000 * 3) / 16000; speech = (np.random.randn(len(t)) * (400 + 5000 * np.abs(np.sin(t * 5)))).astype(np.int16)
+        sig = np.concatenate([np.concatenate(frames(2, 8)), speech, np.concatenate(frames(2, 8))]); ep = Endpointer(); ev = []
+        for i in range(0, len(sig) - FRAME + 1, FRAME):
+            e = ep.feed(sig[i:i + FRAME])
+            if e: ev.append(e[0])
+        self.assertEqual(ev, ["start", "end"])
+
+
 class EndpointerTests(unittest.TestCase):
     def test_a_sentence_between_silences_is_one_utterance(self):
         ep = Endpointer(); ev = run(ep, frames(2, 8) + frames(1.5, 3000) + frames(2, 8))

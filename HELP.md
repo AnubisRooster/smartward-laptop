@@ -171,6 +171,7 @@ Then quit SmartWard from its tray icon and open it again. An open window shows a
 | A source keeps failing | Open **Sources**; the failed source says why (blocked by robots.txt, not a feed, timeout). |
 | "SmartWard's backend isn't running" | Quit from the tray icon and open it again. The log is `~/.local/state/smartward/api.log`. |
 | No natural voice | Check Settings → Voice. Install it with `tts/setup.sh` and `sudo apt install libespeak-ng1 espeak-ng-data`. |
+| Hands-free stays open for a long time | Usually the room: a fan or music that came on while you were quiet. It now lets go within a few seconds, but a very noisy room still confuses it; quiet the noise or move the microphone. |
 | Hands-free says speech input isn't installed | Run `~/SmartWardApp/stt/setup.sh` and `sudo apt install alsa-utils`. |
 | The phone can't connect | Is the laptop awake and SmartWard running? Tailscale connected on both? `tailscale serve status` should show 127.0.0.1:8000. |
 | "This Tailscale account isn't allowed" | The login in Settings → Remote access must be the account your phone uses. |
