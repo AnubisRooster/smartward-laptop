@@ -34,7 +34,8 @@ Terminal=false
 Categories=Office;
 Keywords=AI;Research;Reading;Knowledge;Graph;RSS;
 StartupNotify=true
-StartupWMClass=$ID
+# The window announces the app id "smartward", not the bundle identifier; GNOME matches the dock icon on it.
+StartupWMClass=smartward
 Actions=refresh;
 
 [Desktop Action refresh]
