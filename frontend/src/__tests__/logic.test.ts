@@ -146,3 +146,11 @@ describe('phone voice: audio encoding', () => {
     expect(toRate16k(new Float32Array(10), 16000).length).toBe(10);
   });
 });
+
+import { qrDataUrl } from '../qr';
+describe('phone address QR', () => {
+  it('makes a PNG picture of the address, and a different one for a different address', async () => {
+    const a = await qrDataUrl('https://laptop.tail1234.ts.net'); const b = await qrDataUrl('https://other.tail1234.ts.net');
+    expect(a.startsWith('data:image/png;base64,')).toBe(true); expect(a.length).toBeGreaterThan(300); expect(a).not.toBe(b);
+  });
+});

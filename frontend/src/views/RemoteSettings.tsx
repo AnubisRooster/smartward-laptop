@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
+import { useEffect, useState } from 'react';
+import { qrDataUrl } from '../qr';
 import { errText, get, post, put } from '../api';
 import { useLoad } from '../hooks';
 import { Badge, Btn, Card, Err, Field, inputCls } from '../ui';
@@ -14,13 +14,14 @@ export default function RemoteSettings() {
   const { data: r, reload } = useLoad<any>('/remote/status', undefined, 8000);
   const { data: ts, reload: reloadTs } = useLoad<any>('/remote/tailscale', undefined, 8000);
   const [login, setLogin] = useState(''); const [pass, setPass] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const qr = useRef<HTMLCanvasElement>(null);
+  const [qrImg, setQrImg] = useState('');
+  const url = r?.host ? `https://${r.host}` : ts?.https_url || '';
   useEffect(() => { if (r && !login) setLogin(r.login || ts?.login || ''); }, [r?.login, ts?.login]);
-  useEffect(() => { if (ts?.https_url && qr.current) void QRCode.toCanvas(qr.current, ts.https_url, { width: 144, margin: 1 }).catch(() => {}); }, [ts?.https_url]);
+  // The picture is made from the very address shown beside it, whenever that address changes (not tied to when the box appears).
+  useEffect(() => { let live = true; if (!url) { setQrImg(''); return; } qrDataUrl(url).then(d => live && setQrImg(d)).catch(() => live && setQrImg('')); return () => { live = false; }; }, [url]);
   if (!r) return null;
   const save = async (body: any, ok?: string) => { setErr(''); setBusy(true); try { await put('/remote/config', body); await reload(); if (ok) toast.ok(ok); } catch (e) { setErr(errText(e)); } setBusy(false); };
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.ok('Copied'); } catch { toast.error('Couldn’t copy'); } };
-  const url = r.host ? `https://${r.host}` : ts?.https_url || '';
   return (
     <Card className="space-y-3">
       <div id="remote-access" className="scroll-mt-16"><h2 className="font-medium">Remote access (phone)</h2>
@@ -48,7 +49,7 @@ export default function RemoteSettings() {
 
       {url && r.enabled && (
         <div className="flex flex-wrap items-center gap-4 rounded-lg bg-zinc-800/60 p-3">
-          <canvas ref={qr} width={144} height={144} aria-label="QR code for the phone address" className="rounded bg-white" />
+          {qrImg ? <img src={qrImg} width={176} height={176} alt={`QR code for ${url}`} className="rounded bg-white" /> : <div className="flex h-44 w-44 items-center justify-center rounded bg-zinc-700 p-3 text-center text-xs text-zinc-300">QR code unavailable. Type the address instead.</div>}
           <div className="min-w-0 text-sm"><div className="mb-1 text-xs text-zinc-500">On your phone (Tailscale connected), scan this or open:</div><div className="break-all font-medium">{url}</div>
             <div className="mt-2 flex gap-2"><Btn small onClick={() => copy(url)}>Copy address</Btn></div>
             <div className="mt-2 text-xs text-zinc-500">Then sign in, and use Share → Add to Home Screen (iPhone) or the menu → Install app (Android).</div></div>
