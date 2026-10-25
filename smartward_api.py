@@ -464,4 +464,4 @@ _UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 if os.path.isdir(_UI): app.mount("/", StaticFiles(directory=_UI, html=True), name="ui")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000, access_log=False)   # the window polls; per-request lines only bury real problems

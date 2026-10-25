@@ -1,13 +1,18 @@
 #!/bin/bash
-# Usage: start_smartward.sh          -> API + UI in a browser window (default)
-#        start_smartward.sh stop     -> stop the API
-#        SMARTWARD_NATIVE=1 start_smartward.sh -> use the native Tauri window
+# Usage: start_smartward.sh          -> SmartWard's own window (a browser window if that isn't built)
+#        start_smartward.sh stop     -> stop the API and the voice server
+#        SMARTWARD_BROWSER=1 start_smartward.sh -> force the browser version
 APP_DIR="$HOME/SmartWardApp"
 export PATH="$HOME/.local/bin:$PATH"
 URL="http://localhost:8000/"
 cd "$APP_DIR" || exit 1
 
 if [ "$1" = "stop" ]; then pkill -f "$APP_DIR/smartward_api.py"; "$APP_DIR/tts/start.sh" stop; exit 0; fi
+
+# SmartWard's own window starts and supervises the API and the voice server itself.
+# Set SMARTWARD_BROWSER=1 to use a browser window instead (the code below).
+NATIVE_BIN="$APP_DIR/resources/smartward-ui-bin/smartward"
+if [ -z "$SMARTWARD_BROWSER" ] && [ -z "$SMARTWARD_NATIVE_LEGACY" ] && [ -x "$NATIVE_BIN" ]; then exec "$NATIVE_BIN"; fi
 
 # Start the API unless our own copy is already serving the UI
 if ! curl -s http://localhost:8000/status > /dev/null; then

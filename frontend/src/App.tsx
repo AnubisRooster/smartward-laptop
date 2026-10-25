@@ -9,6 +9,7 @@ import Chat from './views/Chat';
 import Projects from './views/Projects';
 import Settings from './views/Settings';
 import Onboarding from './views/Onboarding';
+import { onDesktopEvent } from './desktop';
 
 const TABS: [Tab, string, string][] = [['today', 'Today', '☀'], ['reading', 'Reading', '▤'], ['graph', 'Graph', '⁂'], ['chat', 'Chat', '✎'], ['projects', 'Projects', '▣']];
 
@@ -39,6 +40,13 @@ export default function App() {
   const [locked, setLocked] = useState(() => { try { return sessionStorage.getItem('sw.unlocked') !== '1'; } catch { return true; } });
   const idle = useRef<any>(null);
   const lockOn = !!st?.lock_enabled;
+
+  // The tray's "Lock now".
+  useEffect(() => {
+    let off = () => {};
+    onDesktopEvent('lock-now', () => { if (lockOn) { speech.stop(); setLocked(true); try { sessionStorage.removeItem('sw.unlocked'); } catch {} } }).then(f => { off = f; });
+    return () => off();
+  }, [lockOn]);
 
   // Lock on launch and after the grace period away / idle; cover the app while hidden.
   useEffect(() => {

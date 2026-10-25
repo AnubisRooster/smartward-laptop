@@ -4,11 +4,13 @@ Local-first research strategist, ported from the iPhone app. Everything runs on 
 
 ## Run
 
-- Menu icon **SmartWard**, or `~/SmartWardApp/bin/start_smartward.sh`
-  - Starts the API (`http://localhost:8000`) and opens the app in Firefox/Chromium.
-  - `SMARTWARD_NATIVE=1 ~/SmartWardApp/bin/start_smartward.sh` uses the native Tauri window instead.
-  - `~/SmartWardApp/bin/start_smartward.sh stop` stops the API.
-- Data lives in `~/.local/share/smartward/` (SQLite). Logs: `~/SmartWardApp/api.log`.
+- Open **SmartWard** from the applications menu (or `~/SmartWardApp/bin/start_smartward.sh`). It is its own window with its own icon, not a browser tab.
+  It starts and watches the API (`http://localhost:8000`) and the voice server, and restarts the API if it stops.
+- **Closing the window keeps SmartWard running in the tray** (sources keep refreshing and indexing). The tray icon has Open, Refresh, Index now, Lock now and Quit; Quit stops the API and voice server too.
+  Settings → This computer can start it at login (hidden in the tray).
+- Browser version: `SMARTWARD_BROWSER=1 ~/SmartWardApp/bin/start_smartward.sh`. `start_smartward.sh stop` stops everything.
+- Data lives in `~/.local/share/smartward/` (SQLite). Logs: `~/.local/state/smartward/api.log` (rotated).
+- First time on a machine: `scripts/build_ui.sh`, `scripts/build_native.sh`, then `scripts/install_desktop.sh` (menu entry and icons).
 
 ## Requirements
 
@@ -32,7 +34,6 @@ The profile in use replaces the voice and rate above.
 - Install it on a new machine with `tts/setup.sh` (needs `uv` or Python 3.10–3.13, and the system's `libespeak-ng1`).
 - Start or stop it by hand: `~/SmartWardApp/tts/start.sh` / `~/SmartWardApp/tts/start.sh stop` (log: `tts/tts.log`).
 - It uses your system's espeak-ng (`libespeak-ng1`, `espeak-ng-data`).
-- The native Tauri window (`SMARTWARD_NATIVE=1`) was not rebuilt for this change; use the browser window, or rebuild it (see below).
 
 ## Models
 
@@ -55,13 +56,12 @@ Face ID/Touch ID, iOS background tasks (it refreshes while the app is running in
 share sheet (use the bookmarklet or "Save a page"), voice navigation by speech recognition,
 Apple Foundation Models (a local Ollama model is used instead).
 
-## Build the native window (optional)
+## The native window
 
-```bash
-cd ~/SmartWardApp/frontend && . ~/.cargo/env && npm run tauri build -- --no-bundle
-cp src-tauri/target/release/smartward-ui ~/SmartWardApp/resources/smartward-ui-bin/
-scripts/build_ui.sh        # the browser version served by the API
-```
+The window is a small Tauri shell (`frontend/src-tauri`): tray icon, single instance, process supervisor. The interface inside it is the web app the API serves from `ui/`,
+so a front-end change only needs `scripts/build_ui.sh` (reload with Ctrl+R). Rebuild the shell with `scripts/build_native.sh` only when `src-tauri/` changes
+(needs Rust, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`). The tray icon needs the GNOME "AppIndicator" extension (Ubuntu has it on by default).
+The icon is drawn in `resources/icons/smartward.svg`; `npx tauri icon` regenerates the PNG/ICNS set from it.
 
 ## Development
 
@@ -73,6 +73,7 @@ The natural voice lives in `tts/`. Your library is **not** in this folder: it is
 | `scripts/check.sh` | Everything: the Python tests, shell syntax, front-end type check. Run it before and after any change. (`--build` also rebuilds the UI.) |
 | `python3 -m unittest discover -s tests -t .` | Only the Python tests (about 60, a few seconds). They use a throwaway data folder, no model, no network. |
 | `scripts/build_ui.sh` | Rebuild the front end into `ui/` (reload the page; restart the API only if `sw/` or `smartward_api.py` changed). |
+| `scripts/build_native.sh`, `scripts/install_desktop.sh` | Build the native window; install the menu entry and icons. `scripts/check.sh --native` also runs `cargo check`. |
 | `scripts/smoke.sh` | Read-only check that the *running* app answers: API, settings, voice status, UI. Run it after restarting. |
 | `bin/start_smartward.sh stop`, then start | Restart the API and voice server. |
 

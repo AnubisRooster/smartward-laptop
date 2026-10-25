@@ -3,6 +3,7 @@ import { BASE, errText, get, post, put, http } from '../api';
 import { useLoad } from '../hooks';
 import { Badge, Btn, Card, Err, Field, inputCls, Seg, Spin, Title } from '../ui';
 import VoiceSettings from './VoiceSettings';
+import DesktopSettings from './DesktopSettings';
 
 const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
@@ -58,6 +59,8 @@ export default function Settings() {
       </Section>
 
       <VoiceSettings s={s} save={save} />
+
+      <DesktopSettings />
 
       <Lock s={s} onChanged={reload} save={save} />
 
