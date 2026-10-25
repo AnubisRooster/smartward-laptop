@@ -28,6 +28,7 @@ function VoiceOptions({ voices, current }: { voices: string[]; current: string }
 
 export default function VoiceSettings({ s, save }: { s: any; save: (values: any) => Promise<void> }) {
   const { data: tts } = useLoad<any>('/tts/status', undefined, 5000);
+  const { data: mic } = useLoad<any>('/voice/status');
   const [browserVoices, setBrowserVoices] = useState<string[]>([]);
   const [rate, setRate] = useState<number>(Number(s.voice_rate) || 1);
   const [profiles, setProfiles] = useState<Record<string, Profile>>(s.tts_profiles || {});
@@ -67,6 +68,8 @@ export default function VoiceSettings({ s, save }: { s: any; save: (values: any)
   return (
     <Section title="Voice" desc="Read-aloud runs on this computer, so article text never leaves it. The natural voice sounds far less robotic than the browser’s built-in one.">
       <Err>{err}</Err>
+      <Row><span>Speech input (hands-free chat)</span>{mic?.installed ? <Badge tone="green">Installed · {mic.model}</Badge> : <Badge tone="amber">Not installed</Badge>}</Row>
+      {mic && !mic.installed && <div className="text-xs text-zinc-500">Hands-free chat needs a local speech model (about 500 MB, downloaded once). Run <code>~/SmartWardApp/stt/setup.sh</code>, then use the 🎙 button in Chat. The microphone is open only while hands-free is on, and nothing is sent anywhere.</div>}
       <Row><span>Voice</span><Seg value={engine} onChange={x => save({ tts_engine: x })} options={[['auto', 'Automatic'], ['kokoro', 'Natural'], ['browser', 'Browser']]} /></Row>
       <Row><span>Natural voice</span>{up ? <Badge tone="green">Running · {voices.length} voices</Badge> : <Badge tone="red">Not running</Badge>}</Row>
       {!up && engine !== 'browser' && <div className="text-xs text-zinc-500">Start SmartWard from its menu icon (or run <code>~/SmartWardApp/bin/start_smartward.sh</code>) to start it. Until then the browser voice reads.</div>}

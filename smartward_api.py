@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -185,6 +185,23 @@ def share(s: ShareIn):
     try: aid, _ = sources.add_page_as_article(s.url, "Shared with SmartWard", s.project_id)
     except sources.FetchError as e: bad(str(e))
     bg(pipeline.run); return {"id": aid}
+
+# ---------- speech input (hands-free chat) ----------
+@app.get("/api/voice/status")
+def voice_status(): return stt.status()
+@app.post("/api/voice/start")
+def voice_start():
+    try: stt.start()
+    except RuntimeError as e: bad(str(e), 409)
+    return stt.status()
+@app.post("/api/voice/stop")
+def voice_stop(): stt.stop(); return stt.status()
+@app.post("/api/voice/pause")
+def voice_pause(): return {"ok": stt.send("pause")}
+@app.post("/api/voice/resume")
+def voice_resume(): return {"ok": stt.send("resume")}
+@app.get("/api/voice/poll")
+def voice_poll(after: int = 0): return stt.poll(after)
 
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)
@@ -487,6 +504,9 @@ def _scheduler():
                 pipeline.run()
         except Exception: pass
         time.sleep(60)
+
+@app.on_event("shutdown")
+def _close_microphone(): stt.stop()
 
 @app.on_event("startup")
 def _start(): bg(_scheduler)

@@ -5,6 +5,7 @@ import { ago, del, errText, get, post } from '../api';
 import { speech, useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Modal, Field, inputCls, Spin, cx } from '../ui';
 import { ask, toast } from '../feedback';
+import { useHandsFree } from '../useHandsFree';
 
 export default function Chat() {
   const { convId, go } = useNav();
@@ -89,10 +90,13 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
   const running = c?.status === 'running';
   useEffect(() => { setFast(!!running); }, [running]);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [c?.messages?.length, c?.messages?.[c?.messages?.length - 1]?.content]);
-  const send = async () => { const t = text.trim(); if (!t) return; setText(''); setErr(''); setFast(true); try { await post(`/conversations/${id}/send`, { text: t }); reload(); onChanged(); } catch (e) { setErr(errText(e)); setText(t); } };
+  const sendText = async (t: string) => { if (!t) return; setText(''); setErr(''); setFast(true); try { await post(`/conversations/${id}/send`, { text: t }); reload(); onChanged(); } catch (e) { setErr(errText(e)); setText(t); } };
+  const send = () => sendText(text.trim());
   const stop = async () => { try { await post(`/conversations/${id}/cancel`); toast.info('Stopping…'); reload(); } catch (e) { setErr(errText(e)); } };
   const decide = async (aid: string, approved: boolean) => { try { await post(`/approvals/${aid}`, { approved }); reload(); } catch (e) { setErr(errText(e)); } };
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.ok('Copied'); } catch { toast.error('Couldn’t copy'); } };
+  const pendingNow = (c?.approvals || []).filter((x: any) => x.status === 'pending');
+  const hf = useHandsFree({ running: !!running, messages: c?.messages || [], pending: pendingNow, send: sendText, stop, decide });
   if (!c) return <div className="p-6"><Spin /></div>;
   const pending = (c.approvals || []).filter((a: any) => a.status === 'pending');
   const msgs: any[] = c.messages || [];
@@ -126,12 +130,19 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
       {pending.map((a: any) => (
         <div key={a.id} className="border-t border-amber-700/50 bg-amber-950/30 p-3"><div className="mb-1 text-sm font-medium text-amber-200">Approval needed · {a.title}</div><div className="mb-2 break-all text-sm text-zinc-300">{a.detail}</div>
           <div className="flex gap-2"><Btn kind="primary" small onClick={() => decide(a.id, true)}>Approve</Btn><Btn small onClick={() => decide(a.id, false)}>Decline</Btn></div></div>))}
-      <div className="border-t border-zinc-800 p-3"><Err>{err}</Err>
+      <div className="border-t border-zinc-800 p-3"><Err>{err || hf.error}</Err>
+        {hf.on && <div className="mb-2 flex items-center gap-2 text-xs text-zinc-400" role="status" aria-live="polite"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
+          {{ loading: 'Loading the speech model…', listening: 'Listening… just talk. Say “stop listening” to finish.', hearing: 'Hearing you…', thinking: 'Thinking…', speaking: 'Speaking… (the microphone is paused so it doesn’t hear itself)', off: '' }[hf.status]}
+          {pending.length > 0 && ' · Say “approve” or “decline”.'}
+          {hf.status === 'speaking' && <button type="button" className="ml-auto rounded border border-zinc-700 px-2 py-0.5 hover:bg-zinc-800" onClick={() => speech.stop()}>Stop talking</button>}</div>}
         <form onSubmit={e => { e.preventDefault(); send(); }} className="flex items-end gap-2">
           <textarea rows={Math.min(6, Math.max(1, text.split('\n').length))} value={text} onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!running) send(); } }}
             disabled={running && pending.length > 0} placeholder={running ? 'Strategist is answering…' : 'Message the strategist (Shift+Enter for a new line)'} aria-label="Message"
             className="flex-1 resize-none rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+          <button type="button" onClick={hf.toggle} aria-pressed={hf.on} title={hf.on ? 'Turn hands-free off (or say “stop listening”)' : 'Hands-free: talk to the strategist and hear its answers'}
+            className={cx('inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm', hf.on ? 'border-red-500 bg-red-950/40 text-red-300' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700')}>
+            <span className={cx('h-2 w-2 rounded-full', hf.on ? 'animate-pulse bg-red-500' : 'bg-zinc-500')} aria-hidden />🎙 {hf.on ? 'On' : 'Hands-free'}</button>
           {running ? <Btn onClick={stop} kind="danger">Stop</Btn> : <Btn type="submit" kind="primary" disabled={!text.trim()}>Send</Btn>}
         </form></div>
     </div>

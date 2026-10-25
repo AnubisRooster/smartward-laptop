@@ -35,6 +35,16 @@ The profile in use replaces the voice and rate above.
 - Start or stop it by hand: `~/SmartWardApp/tts/start.sh` / `~/SmartWardApp/tts/start.sh stop` (log: `tts/tts.log`).
 - It uses your system's espeak-ng (`libespeak-ng1`, `espeak-ng-data`).
 
+## Hands-free chat (speech input)
+
+The 🎙 button in Chat turns on hands-free: it listens through the microphone, sends each sentence when you pause, reads the answer aloud with the natural voice,
+and listens again. Say “stop listening” to finish; “stop” cancels an answer in progress; when a tool needs approval it reads the request and you say “approve” or “decline”.
+It never listens while it speaks, and it switches itself off when the window is hidden, the app locks, or you leave the chat. The microphone is open only while it is on.
+
+Everything runs on this computer: `stt/listen.py` (microphone via `arecord`, a simple voice-activity detector, and Whisper through faster-whisper) is started by the API
+only while hands-free is on, and stopped by it when the page stops asking. Install it once with `stt/setup.sh` (about 500 MB: the Python packages and the `small.en` model;
+`MODEL=base.en stt/setup.sh` for a smaller one). English only with `.en` models.
+
 ## Models
 
 Default chat model `ollama_chat/llama3.2:3b`; override in Settings or with `SMARTWARD_MODEL`.

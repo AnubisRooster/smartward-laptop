@@ -17,3 +17,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
+
+# Speech input (see stt/setup.sh)
+stt/.venv/
+stt/models/
+stt/model.txt

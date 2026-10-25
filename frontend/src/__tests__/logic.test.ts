@@ -71,3 +71,28 @@ describe('links', () => {
     for (const t of ['', null, undefined, 'hello', 'javascript:alert(1)', 'file:///etc/passwd', 'ftp://x.org']) expect(firstUrl(t as any)).toBeNull();
   });
 });
+
+import { parseVoice, plainForSpeech } from '../voiceInput';
+describe('hands-free phrases', () => {
+  it('turns hands-free off and stops talking', () => {
+    for (const t of ['Stop listening.', 'stop listening', 'SmartWard, stop listening', 'Goodbye!']) expect(parseVoice(t, { pending: false }).kind).toBe('stop-listening');
+    for (const t of ['Stop.', 'be quiet', 'Never mind.']) expect(parseVoice(t, { pending: false }).kind).toBe('stop');
+  });
+  it('yes and no only answer an approval that is waiting', () => {
+    expect(parseVoice('Yes.', { pending: true }).kind).toBe('approve'); expect(parseVoice('go ahead', { pending: true }).kind).toBe('approve');
+    expect(parseVoice('No', { pending: true }).kind).toBe('decline'); expect(parseVoice('cancel', { pending: true }).kind).toBe('decline');
+    expect(parseVoice('Yes.', { pending: false })).toEqual({ kind: 'text', text: 'Yes.' });
+  });
+  it('anything else goes to the strategist as written', () => {
+    expect(parseVoice('  What changed in vLLM 0.9? ', { pending: false })).toEqual({ kind: 'text', text: 'What changed in vLLM 0.9?' });
+    expect(parseVoice('stop the benchmark run and summarise', { pending: false }).kind).toBe('text');
+  });
+});
+describe('answers read aloud', () => {
+  it('drops marks, citations and code', () => {
+    const parts = plainForSpeech('## Ideas\n\n1. **Quality** vs diversity [R1]\n2. See [the paper](https://x.org/a)\n\n```py\nprint(1)\n```\n> quoted `inline`');
+    expect(parts).toEqual(['Ideas', 'Quality vs diversity', 'See the paper', '(code omitted)', 'quoted inline']);
+    expect(parts.join(' ')).not.toMatch(/[*#`\[\]]|https/);
+  });
+  it('handles empty input', () => { expect(plainForSpeech('')).toEqual([]); });
+});
