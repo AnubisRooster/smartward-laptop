@@ -196,13 +196,18 @@ def fetch_full_text(url):
     text, title = extract_page(r.text, str(r.url))
     return text, title
 
+MAX_PER_FETCH = 40      # a feed with years of archive (some publish 1,000+ posts) brings in its newest posts, not all of them
+
+def newest(arts, n=MAX_PER_FETCH):
+    return sorted(arts, key=lambda a: -(a.get("published") or 0))[:n]
+
 def refresh_source(sid):
     src = db.q("SELECT * FROM sources WHERE id=?", (sid,), one=True)
     if not src: return 0
     added = 0
     try:
         arts, etag, lm = fetch_source(src)
-        for a in arts:
+        for a in newest(arts):
             u = canon(a["url"]) if "#v" not in a["url"] else a["url"]
             if db.q("SELECT 1 FROM articles WHERE url=?", (u,)): continue
             if not a.get("title"): continue

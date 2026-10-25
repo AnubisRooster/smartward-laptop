@@ -80,3 +80,23 @@ class SourceHelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FetchCapTests(unittest.TestCase):
+    def setUp(self): h.reset()
+
+    def test_a_huge_archive_brings_in_only_the_newest_posts(self):
+        from unittest import mock
+        from sw import db, sources
+        sid = h.add_source("Big archive")
+        arts = [{"url": f"https://example.com/p{i}", "title": f"Post {i}", "published": 1000 + i} for i in range(1300)]
+        with mock.patch("sw.sources.fetch_source", return_value=(arts, None, None)):
+            added = sources.refresh_source(sid)
+        self.assertEqual(added, sources.MAX_PER_FETCH)
+        titles = {r["title"] for r in db.q("SELECT title FROM articles WHERE source_id=?", (sid,))}
+        self.assertIn("Post 1299", titles); self.assertNotIn("Post 0", titles)
+
+    def test_undated_feeds_keep_their_order(self):
+        from sw import sources
+        arts = [{"url": f"u{i}", "title": str(i)} for i in range(60)]
+        self.assertEqual([a["title"] for a in sources.newest(arts, 3)], ["0", "1", "2"])
