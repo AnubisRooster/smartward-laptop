@@ -154,3 +154,16 @@ describe('phone address QR', () => {
     expect(a.startsWith('data:image/png;base64,')).toBe(true); expect(a.length).toBeGreaterThan(300); expect(a).not.toBe(b);
   });
 });
+
+import { apiBase } from '../api';
+describe('where the page finds the API', () => {
+  it('uses its own address on the laptop window and on a phone (never the phone\'s own localhost)', () => {
+    expect(apiBase({ protocol: 'http:', port: '8000' })).toBe('');
+    expect(apiBase({ protocol: 'https:', port: '' })).toBe('');            // a phone, through the private https address
+    expect(apiBase({ protocol: 'https:', port: '8443' })).toBe('');
+  });
+  it('points the dev server and the splash page at the laptop API', () => {
+    expect(apiBase({ protocol: 'http:', port: '1420' })).toBe('http://localhost:8000');
+    expect(apiBase({ protocol: 'tauri:', port: '' })).toBe('http://localhost:8000');
+  });
+});

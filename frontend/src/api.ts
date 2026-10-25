@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 // Served by the API itself (browser) -> same origin. Inside the Tauri webview -> talk to localhost:8000.
-export const BASE = typeof location !== 'undefined' && location.port === '8000' ? '' : 'http://localhost:8000';
+/** Where the API is, as seen from the page. The page is served by the API itself on the laptop (port 8000) and, for a phone, over the private https
+ *  address (no port): both use the page's own address. Only the dev server and the splash page need to be told where the laptop's API is. */
+export const apiBase = (loc: { protocol: string; port: string } | undefined): string => (!loc || loc.protocol === 'https:' || loc.port === '8000' ? '' : 'http://localhost:8000');
+export const BASE = apiBase(typeof location !== 'undefined' ? location : undefined);
 export const http = axios.create({ baseURL: BASE + '/api', timeout: 30000 });
 // Changes can start slow work (fetching a page, building a brief), so they get longer than reads.
 const LONG = { timeout: 300000 };
