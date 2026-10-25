@@ -63,6 +63,11 @@ so a front-end change only needs `scripts/build_ui.sh` (reload with Ctrl+R). Reb
 (needs Rust, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`). The tray icon needs the GNOME "AppIndicator" extension (Ubuntu has it on by default).
 The icon is drawn in `resources/icons/smartward.svg`; `npx tauri icon` regenerates the PNG/ICNS set from it.
 
+**In the window:** Ctrl+K opens the command palette (go anywhere, run commands, search articles, themes, projects and chats); `?` lists the keyboard shortcuts;
+drag a web link onto the window, or use the tray's "Save link from clipboard", to save a page. Desktop notifications (new matching articles, a failing source, a chat waiting
+for approval) come from `POST /api/events/poll`, which the shell calls once a minute; each kind can be switched off in Settings → Notifications.
+The light theme is generated from the dark palette by `scripts/gen_theme.py`; run it again only if the colours in use change.
+
 ## Development
 
 The app is a Python API (`smartward_api.py`, `sw/`) plus a React front end (`frontend/`, built into `ui/`, which the API serves).
@@ -70,8 +75,8 @@ The natural voice lives in `tts/`. Your library is **not** in this folder: it is
 
 | | |
 |---|---|
-| `scripts/check.sh` | Everything: the Python tests, shell syntax, front-end type check. Run it before and after any change. (`--build` also rebuilds the UI.) |
-| `python3 -m unittest discover -s tests -t .` | Only the Python tests (about 60, a few seconds). They use a throwaway data folder, no model, no network. |
+| `scripts/check.sh` | Everything: the Python tests, shell syntax, front-end type check and Vitest tests. Run it before and after any change. (`--build` also rebuilds the UI.) |
+| `python3 -m unittest discover -s tests -t .` | Only the Python tests (about 80, a few seconds). They use a throwaway data folder, no model, no network. |
 | `scripts/build_ui.sh` | Rebuild the front end into `ui/` (reload the page; restart the API only if `sw/` or `smartward_api.py` changed). |
 | `scripts/build_native.sh`, `scripts/install_desktop.sh` | Build the native window; install the menu entry and icons. `scripts/check.sh --native` also runs `cargo check`. |
 | `scripts/smoke.sh` | Read-only check that the *running* app answers: API, settings, voice status, UI. Run it after restarting. |

@@ -1,6 +1,7 @@
 //! SmartWard's desktop shell: one window, a tray icon, and a supervisor that keeps the
 //! local API and the voice server running. The interface itself is the web app the API serves.
 
+mod notify;
 mod supervisor;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -43,11 +44,12 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open SmartWard", true, None::<&str>)?;
     let refresh = MenuItem::with_id(app, "refresh", "Refresh sources now", true, None::<&str>)?;
     let index = MenuItem::with_id(app, "index", "Index new articles now", true, None::<&str>)?;
+    let clip = MenuItem::with_id(app, "clip", "Save link from clipboard", true, None::<&str>)?;
     let lock = MenuItem::with_id(app, "lock", "Lock now", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit SmartWard", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&open, &PredefinedMenuItem::separator(app)?, &refresh, &index, &lock, &PredefinedMenuItem::separator(app)?, &quit],
+        &[&open, &PredefinedMenuItem::separator(app)?, &clip, &refresh, &index, &lock, &PredefinedMenuItem::separator(app)?, &quit],
     )?;
 
     let mut builder = TrayIconBuilder::with_id("main")
@@ -58,6 +60,10 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             "open" => show_main(app),
             "refresh" => post_api("/api/refresh"),
             "index" => post_api("/api/pipeline/run"),
+            "clip" => {
+                show_main(app);
+                let _ = app.emit("save-clipboard", ());
+            }
             "lock" => {
                 show_main(app);
                 let _ = app.emit("lock-now", ());
@@ -93,6 +99,7 @@ pub fn run() {
             let tray_ok = build_tray(app).map_err(|e| eprintln!("no tray icon: {e}")).is_ok();
             app.manage(TrayAvailable(Arc::new(AtomicBool::new(tray_ok))));
             app.manage(Supervisor::start(app.handle().clone()));
+            notify::start(app.handle().clone());
             // Ctrl-C, `kill`, or the session ending: quit properly, so the API and voice server stop too.
             let handle = app.handle().clone();
             let _ = ctrlc::set_handler(move || handle.exit(0));

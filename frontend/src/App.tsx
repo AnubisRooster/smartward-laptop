@@ -4,6 +4,8 @@ import { Tab, useHashSync, useLoad, useNav, speech } from './hooks';
 import { Progress, Spin, cx } from './ui';
 import { FeedbackHost } from './feedback';
 import Shortcuts from './Shortcuts';
+import Palette from './Palette';
+import Links from './Links';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
@@ -46,6 +48,7 @@ export default function App() {
   const idle = useRef<any>(null);
   const lockOn = !!st?.lock_enabled;
   const lockNow = () => { speech.stop(); setLocked(true); try { sessionStorage.removeItem('sw.unlocked'); } catch {} };
+  useEffect(() => { const f = () => lockNow(); window.addEventListener('sw-lock', f); return () => window.removeEventListener('sw-lock', f); }, []);
   const toggleRail = () => setRail(r => { try { localStorage.setItem('sw.rail', r ? '0' : '1'); } catch {} return !r; });
 
   // The tab title shows what's unread, so you can tell from the window list.
@@ -107,6 +110,8 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-hidden"><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></div>
       </main>
       <Shortcuts />
+      <Palette lockOn={lockOn} />
+      <Links />
       <FeedbackHost />
     </div>
   );

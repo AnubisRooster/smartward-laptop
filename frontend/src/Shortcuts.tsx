@@ -6,6 +6,7 @@ import { Modal } from './ui';
 /** Global single-key shortcuts and the ? overlay. Ignored while typing, and with Ctrl/Alt/Meta held. */
 export default function Shortcuts() {
   const { go } = useNav(); const [help, setHelp] = useState(false);
+  useEffect(() => { const f = () => setHelp(true); window.addEventListener('sw-help', f); return () => window.removeEventListener('sw-help', f); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || isTyping(e.target as HTMLElement)) return;

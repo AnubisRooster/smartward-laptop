@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -175,6 +175,14 @@ def share(s: ShareIn):
     try: aid, _ = sources.add_page_as_article(s.url, "Shared with SmartWard", s.project_id)
     except sources.FetchError as e: bad(str(e))
     bg(pipeline.run); return {"id": aid}
+
+@app.get("/api/search")
+def quick_search(q: str = ""): return events.quick_search(q)
+
+@app.post("/api/events/poll")
+def poll_events():
+    """Called by the desktop shell about once a minute; each event is returned once."""
+    return {"events": events.poll(), "unread": (db.q("SELECT COUNT(*) n FROM articles WHERE read=0 AND relevant=1", one=True) or {"n": 0})["n"]}
 
 @app.post("/api/pipeline/run")
 def run_pipeline():

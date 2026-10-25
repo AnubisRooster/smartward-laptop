@@ -59,3 +59,15 @@ describe('speech chunks', () => {
     expect(parts.join(' ').replace(/\s+/g, ' ')).toBe(text);
   });
 });
+
+import { firstUrl } from '../links';
+describe('links', () => {
+  it('finds the first web address in dropped text', () => {
+    expect(firstUrl('https://example.com/a')).toBe('https://example.com/a');
+    expect(firstUrl('# a comment\r\nhttps://example.com/b\r\nhttps://other.org')).toBe('https://example.com/b');
+    expect(firstUrl('  http://localhost:8000/x  ')).toBe('http://localhost:8000/x');
+  });
+  it('ignores anything that is not http(s)', () => {
+    for (const t of ['', null, undefined, 'hello', 'javascript:alert(1)', 'file:///etc/passwd', 'ftp://x.org']) expect(firstUrl(t as any)).toBeNull();
+  });
+});
