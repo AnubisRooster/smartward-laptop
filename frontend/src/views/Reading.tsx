@@ -4,6 +4,7 @@ import { useLoad, useNav } from '../hooks';
 import { step, isTyping } from '../shortcuts';
 import { Badge, Btn, Empty, Err, Progress, Seg, cx } from '../ui';
 import { toast } from '../feedback';
+import { discussArticle } from '../discuss';
 import Reader from './Reader';
 import Sources from './Sources';
 
@@ -61,6 +62,7 @@ export default function Reading() {
       const list = itemsRef.current; const open = articleId;
       if (e.key === 'j' || e.key === 'k') { const n = step(list.map(x => x.id), open, e.key === 'j' ? 1 : -1); if (n != null) { e.preventDefault(); openArticle(n); document.querySelector(`[data-article-id="${n}"]`)?.scrollIntoView({ block: 'nearest' }); } }
       else if (e.key === 's' && open != null) { const a = list.find(x => x.id === open); if (a) { e.preventDefault(); starRef.current(a); } }
+      else if (e.key === 'c' && open != null) { e.preventDefault(); discussArticle(open); }
       else if (e.key === 'u' && open != null) { e.preventDefault(); post('/articles/mark-read', { ids: [open], read: false }).then(() => { reload(); toast.ok('Marked unread'); }).catch(err => toast.error(errText(err))); }
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);

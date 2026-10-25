@@ -3,6 +3,7 @@ import { get, patch, post, errText } from '../api';
 import { speech, useNav, useSpeech } from '../hooks';
 import { Badge, Btn, Card, Err, Spin } from '../ui';
 import { toast } from '../feedback';
+import { discussArticle } from '../discuss';
 
 export default function Reader({ id, onBack, onChanged }: { id: number; onBack: () => void; onChanged: () => void }) {
   const [a, setA] = useState<any>(null); const [err, setErr] = useState(''); const [sumBusy, setSumBusy] = useState(false);
@@ -44,6 +45,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
       <div className="mx-auto max-w-2xl px-5 py-4">
         <div className="mb-3 flex items-center justify-between"><button className="text-sm text-zinc-400 hover:text-zinc-50 md:hidden" onClick={onBack}>← Back</button><span className="hidden md:block" />
           <div className="flex gap-1.5">
+            <Btn small kind="primary" title="Start a chat about this article (c)" onClick={() => discussArticle(id)}>💬 Discuss in chat</Btn>
             <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { starred: !a.starred }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.starred ? '★ Starred' : '☆ Star'}</Btn>
             <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { read: !a.read }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.read ? 'Mark unread' : 'Mark read'}</Btn>
             <a href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700">Open original ↗</a></div></div>

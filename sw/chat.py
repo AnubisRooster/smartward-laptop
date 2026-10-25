@@ -35,6 +35,20 @@ def new_conversation(mode="brainstorm", project_id=None, off_record=False, title
     return db.x("INSERT INTO conversations(title,mode,project_id,off_record,created,updated) VALUES(?,?,?,?,?,?)",
                 (title or MODES[mode][0], mode, project_id, 1 if off_record else 0, db.now(), db.now()))
 
+def article_opener(a):
+    """The first message of a chat about one article: what it is, what we know of it, and what to start with."""
+    bits = [f"I want to discuss this article: “{a['title']}”"]
+    meta = " · ".join(x for x in [a.get("source"), a.get("author")] if x)
+    if meta: bits.append(meta)
+    if a.get("url"): bits.append(a["url"])
+    summ = json.loads(a["summary"]) if a.get("summary") else None
+    body = ""
+    if summ: body = "\n".join(f"{k}: " + "; ".join(v) for k, v in summ.items() if isinstance(v, list) and v)
+    if not body: body = (a.get("text") or a.get("teaser") or "")[:2500]
+    msg = "\n".join(bits)
+    if body: msg += "\n\n" + fence(body, "untrusted_page")
+    return msg + "\n\nThe article is above, so there is no need to fetch it or save anything unless I ask. Start with the two or three most interesting ideas in it, then ask what I want to dig into."
+
 def tool_defs(mode): return [{"type": "function", "function": {"name": n, **TOOLS[n]}} for n in MODES[mode][2]]
 
 def needs_approval(tool, auto):

@@ -138,6 +138,16 @@ def article(aid: int):
                               themes=graph.article_themes(aid), summary_keys=pipeline.SUMMARY_KEYS, stage_error=a["stage_error"])
     return r
 
+@app.post("/api/articles/{aid}/discuss")
+def discuss(aid: int):
+    """Starts a chat about this article (on this device's model when the article is private) and sends the opening message."""
+    a = db.q("SELECT a.*, s.name AS source FROM articles a LEFT JOIN sources s ON s.id=a.source_id WHERE a.id=?", (aid,), one=True)
+    if not a: bad("No such article", 404)
+    cid = chat.new_conversation("brainstorm", a["project_id"], bool(a["private"]), title=(a["title"] or "Article")[:80])
+    try: chat.send(cid, chat.article_opener(a))
+    except ValueError as e: bad(str(e))
+    return {"id": cid}
+
 @app.post("/api/articles/mark-read")
 def mark_read(body: dict):
     """Mark many articles read (or unread again, for Undo)."""

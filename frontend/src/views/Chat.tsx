@@ -49,6 +49,13 @@ function NewConversation({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
+/** Your own message; a long one (an article you sent over) is folded to a few lines. */
+function UserText({ text }: { text: string }) {
+  const [more, setMore] = useState(false); const long = text.length > 400;
+  return <div className="text-sm leading-relaxed"><div className={cx('whitespace-pre-wrap', long && !more && 'line-clamp-4')}>{text}</div>
+    {long && <button className="mt-1 text-xs underline opacity-80" onClick={() => setMore(!more)}>{more ? 'Show less' : 'Show more'}</button>}</div>;
+}
+
 /** Markdown from the model, sanitized; [R3] becomes a link to source 3. */
 function Rich({ text, sources }: { text: string; sources: any[] }) {
   const { openArticle } = useNav();
@@ -100,7 +107,7 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
         {msgs.length === 0 && <Card className="text-sm text-zinc-400"><div className="mb-1 font-medium text-zinc-200">{c.blurb}</div>Ask anything. Answers cite your library as [R1], [R2]… and the strategist can search it, explore the graph, and — only after you approve — read a page or follow a source.</Card>}
         {msgs.map((m: any) => (
           <div key={m.id} className={cx('group max-w-[85%] rounded-xl px-3.5 py-2.5', m.role === 'user' ? 'ml-auto bg-indigo-600' : 'mr-auto bg-zinc-800')} aria-label={`${m.role === 'user' ? 'You' : 'Strategist'} said`}>
-            {m.role === 'assistant' ? <Rich text={m.content || '…'} sources={m.meta?.sources || []} /> : <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.content}</div>}
+            {m.role === 'assistant' ? <Rich text={m.content || '…'} sources={m.meta?.sources || []} /> : <UserText text={m.content} />}
             {m.meta?.streaming && m.id === msgs[msgs.length - 1].id && running && <span className="ml-1 animate-pulse">▍</span>}
             {m.meta?.tools?.length > 0 && <div className="mt-2 space-y-0.5 text-[11px] text-zinc-400">{m.meta.tools.map((t: any, i: number) => <div key={i}>🛠 {t.tool}{t.args?.url ? ` ${t.args.url}` : ''}{t.auto ? ' (auto-approved)' : t.approved === false ? ' (declined)' : ''}</div>)}</div>}
             {m.role === 'assistant' && m.meta?.sources?.length > 0 && <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer">Sources ({m.meta.sources.length})</summary><ul className="mt-1 space-y-1">{m.meta.sources.map((s: any) => <li key={s.n}>[R{s.n}] <button className="text-indigo-300 hover:underline" onClick={() => go('reading', { articleId: s.article_id })}>{s.title}</button> <span className="text-zinc-500">— {s.why}</span></li>)}</ul></details>}

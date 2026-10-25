@@ -9,6 +9,7 @@ export const SHORTCUTS: { keys: string; does: string; where: string }[] = [
   { keys: '?', does: 'Show this list', where: 'Anywhere' },
   { keys: 'j / k', does: 'Next / previous article', where: 'Reading' },
   { keys: 's', does: 'Star or unstar the open article', where: 'Reading' },
+  { keys: 'c', does: 'Discuss the open article in Chat', where: 'Reading' },
   { keys: 'u', does: 'Mark the open article unread', where: 'Reading' },
   { keys: 'Esc', does: 'Close a dialog', where: 'Anywhere' },
   { keys: 'Enter', does: 'Send a message (Shift+Enter for a new line)', where: 'Chat' },
