@@ -3,7 +3,7 @@ import { Tab } from './nav';
 /** Everything the keyboard can do, in one place: the handlers read it and the help overlay (?) shows it. */
 export const SHORTCUTS: { keys: string; does: string; where: string }[] = [
   { keys: 'Ctrl K', does: 'Search everything and run commands', where: 'Anywhere' },
-  { keys: '1 – 5', does: 'Today, Reading, Graph, Chat, Projects', where: 'Anywhere' },
+  { keys: '1 – 6', does: 'Today, Reading, Radar, Graph, Chat, Projects', where: 'Anywhere' },
   { keys: ',', does: 'Settings', where: 'Anywhere' },
   { keys: '/', does: 'Search articles', where: 'Anywhere' },
   { keys: '?', does: 'Show this list', where: 'Anywhere' },
@@ -15,8 +15,8 @@ export const SHORTCUTS: { keys: string; does: string; where: string }[] = [
   { keys: 'Enter', does: 'Send a message (Shift+Enter for a new line)', where: 'Chat' },
 ];
 
-const NUMBER_TABS: Tab[] = ['today', 'reading', 'graph', 'chat', 'projects'];
-export const tabForKey = (key: string): Tab | null => key === ',' ? 'settings' : /^[1-5]$/.test(key) ? NUMBER_TABS[Number(key) - 1] : null;
+const NUMBER_TABS: Tab[] = ['today', 'reading', 'radar', 'graph', 'chat', 'projects'];
+export const tabForKey = (key: string): Tab | null => key === ',' ? 'settings' : /^[1-6]$/.test(key) ? NUMBER_TABS[Number(key) - 1] : null;
 
 /** True while the user is typing somewhere, when single-key shortcuts must stay out of the way. */
 export function isTyping(el: { tagName?: string; isContentEditable?: boolean } | null): boolean {

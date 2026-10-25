@@ -30,8 +30,8 @@ describe('theme', () => {
 
 describe('shortcuts', () => {
   it('maps number keys to tabs', () => {
-    expect(tabForKey('1')).toBe('today'); expect(tabForKey('5')).toBe('projects'); expect(tabForKey(',')).toBe('settings');
-    expect(tabForKey('6')).toBeNull(); expect(tabForKey('a')).toBeNull();
+    expect(tabForKey('1')).toBe('today'); expect(tabForKey('3')).toBe('radar'); expect(tabForKey('6')).toBe('projects'); expect(tabForKey(',')).toBe('settings');
+    expect(tabForKey('7')).toBeNull(); expect(tabForKey('a')).toBeNull();
   });
   it('stays out of the way while typing', () => {
     expect(isTyping({ tagName: 'INPUT' })).toBe(true); expect(isTyping({ tagName: 'TEXTAREA' })).toBe(true);

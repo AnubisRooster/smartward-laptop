@@ -10,17 +10,18 @@ import { onPhone } from './device';
 import RemoteSignIn, { PhoneAccount } from './RemoteSignIn';
 import { HelpHost } from './HelpGuide';
 import { idleFor, shouldLock, watchActivity } from './activity';
-import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { TrendingUp, Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
 const GraphView = lazy(() => import('./views/Graph'));
+const Radar = lazy(() => import('./views/Radar'));
 const Chat = lazy(() => import('./views/Chat'));
 const Projects = lazy(() => import('./views/Projects'));
 const Settings = lazy(() => import('./views/Settings'));
 import Onboarding from './views/Onboarding';
 import { onDesktopEvent } from './desktop';
 
-const TABS: [Tab, string, typeof Sun][] = [['today', 'Today', Sun], ['reading', 'Reading', Newspaper], ['graph', 'Graph', Share2], ['chat', 'Chat', MessageSquare], ['projects', 'Projects', FolderKanban]];
+const TABS: [Tab, string, typeof Sun][] = [['today', 'Today', Sun], ['reading', 'Reading', Newspaper], ['radar', 'Radar', TrendingUp], ['graph', 'Graph', Share2], ['chat', 'Chat', MessageSquare], ['projects', 'Projects', FolderKanban]];
 
 function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [pin, setPin] = useState(''); const [err, setErr] = useState('');
@@ -101,7 +102,7 @@ export default function App() {
 
   const p = st.pipeline;
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const Body = { today: Today, reading: Reading, graph: GraphView, chat: Chat, projects: Projects, settings: onPhone ? PhoneAccount : Settings }[tab];
+  const Body = { today: Today, reading: Reading, radar: Radar, graph: GraphView, chat: Chat, projects: Projects, settings: onPhone ? PhoneAccount : Settings }[tab];
   const navBtn = (active: boolean, label: string, Icon: typeof Sun, onClick: () => void, extra?: string) => (
     <button key={label} onClick={onClick} aria-current={active ? 'page' : undefined} title={rail ? label : undefined} aria-label={rail ? label : undefined}
       className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] md:flex-none md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm', rail && 'md:justify-center md:px-0', active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200', extra)}>

@@ -85,16 +85,27 @@ if __name__ == "__main__":
 class FetchCapTests(unittest.TestCase):
     def setUp(self): h.reset()
 
-    def test_a_huge_archive_brings_in_only_the_newest_posts(self):
+    def test_a_huge_archive_brings_in_only_its_recent_part(self):
         from unittest import mock
         from sw import db, sources
-        sid = h.add_source("Big archive")
-        arts = [{"url": f"https://example.com/p{i}", "title": f"Post {i}", "published": 1000 + i} for i in range(1300)]
+        sid = h.add_source("Big archive"); now = db.now()
+        arts = [{"url": f"https://example.com/p{i}", "title": f"Post {i}", "published": now - i * 3600} for i in range(1300)]       # one an hour, newest first
         with mock.patch("sw.sources.fetch_source", return_value=(arts, None, None)):
             added = sources.refresh_source(sid)
-        self.assertEqual(added, sources.MAX_PER_FETCH)
+        self.assertEqual(added, sources.MAX_PER_SOURCE)          # 60 days of hourly posts is far more than the cap
         titles = {r["title"] for r in db.q("SELECT title FROM articles WHERE source_id=?", (sid,))}
-        self.assertIn("Post 1299", titles); self.assertNotIn("Post 0", titles)
+        self.assertIn("Post 0", titles); self.assertNotIn("Post 1299", titles)
+
+    def test_a_quiet_blog_keeps_its_newest_posts_whatever_their_age(self):
+        from sw import db, sources
+        old = db.now() - 900 * 86400
+        arts = [{"url": f"u{i}", "title": str(i), "published": old - i} for i in range(100)]
+        self.assertEqual(len(sources.newest(arts)), sources.MAX_PER_FETCH)
+
+    def test_everything_from_the_last_two_months_is_kept_up_to_the_cap(self):
+        from sw import db, sources
+        now = db.now(); arts = [{"url": f"u{i}", "title": str(i), "published": now - i * 86400 * 0.5} for i in range(200)]       # a post every 12 hours
+        kept = sources.newest(arts); self.assertEqual(len(kept), 120); self.assertTrue(all(a["published"] >= now - 60 * 86400 for a in kept))
 
     def test_undated_feeds_keep_their_order(self):
         from sw import sources
@@ -143,3 +154,10 @@ class ConditionalFetchTests(unittest.TestCase):
         real = httpx.Client
         with mock.patch("sw.sources.httpx.Client", lambda **k: real(transport=httpx.MockTransport(handler), **k)), mock.patch("sw.sources._wait"):
             with self.assertRaises(sources.FetchError): sources.get("https://feed.example/x.xml")
+
+
+class ArxivWindowTests(unittest.TestCase):
+    def test_the_search_asks_for_the_last_sixty_days_of_the_topic(self):
+        q = sources.arxiv_search('"KV cache"', now=1_800_000_000)       # 2027-01-15 08:00 UTC
+        self.assertEqual(q, 'all:"KV cache" AND submittedDate:[202611160800 TO 202701160800]')
+        self.assertTrue(sources.arxiv_search("cs.CL", now=1_800_000_000).startswith("cat:cs.CL AND submittedDate:["))

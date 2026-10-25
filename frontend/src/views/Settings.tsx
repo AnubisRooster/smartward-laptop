@@ -186,8 +186,8 @@ function OpenRouter({ s, model, save }: { s: any; model: string; save: (v: any) 
             <span className="block truncate text-xs text-zinc-500">{m.id}</span></button></li>))}
           {shown.length === 0 && <li className="text-xs text-zinc-500">No free model matches.</li>}</ul>}
         {list && <div className="text-xs text-zinc-500">“No tools” models can chat but can’t search your library or fetch pages for you.</div>}
-        {current && <Row><span>Use it for</span><Seg value={s.cloud_scope || 'chat'} onChange={x => save({ cloud_scope: x })} options={[['chat', 'Chat only'], ['everything', 'Everything']]} /></Row>}
-        {current && <div className="text-xs text-zinc-500">“Chat only” keeps summaries, indexing and the knowledge graph on the local model (recommended; free models are rate-limited).</div>}
+        {current && <Row><span>Use it for</span><Seg value={s.cloud_scope || 'analysis'} onChange={x => save({ cloud_scope: x })} options={[['chat', 'Chat only'], ['analysis', 'Chat + analysis'], ['everything', 'Everything']]} /></Row>}
+        {current && <div className="text-xs text-zinc-500">“Chat + analysis” also uses it to read public articles for the knowledge graph and trend analysis. “Chat only” keeps all of that on the local model. Private content never leaves this computer in any mode.</div>}
       </div>
     </details>
   );

@@ -144,6 +144,13 @@ def discover_feed(url):
         if l.get("href"): return urljoin(str(r.url), l.get("href"))
     return None
 
+def arxiv_search(query, now=None, days=None):
+    """The arXiv search string: the topic AND the last `days` days, so every arXiv source brings in about eight weeks of papers (up to the request limit)
+    instead of a fixed number of the newest, which for a busy topic could be only a week or two."""
+    qs = f"cat:{query}" if re.fullmatch(r"[a-z\-]+\.[A-Z]{2}", query or "") else f"all:{query}"
+    days = days or MAX_AGE_DAYS; end = now or db.now(); fmt = lambda t: time.strftime("%Y%m%d%H%M", time.gmtime(t))
+    return f"{qs} AND submittedDate:[{fmt(end - days * 86400)} TO {fmt(end + 86400)}]"
+
 def fetch_source(src):
     """Returns (articles, new_etag, new_last_modified)."""
     kind, url, query = src["kind"], src["url"], src["query"]
@@ -158,8 +165,7 @@ def fetch_source(src):
                 r = get(alt); arts = parse_feed(r.content)
         return arts, r.headers.get("etag"), r.headers.get("last-modified")
     if kind == "arxiv":
-        qs = f"cat:{query}" if re.fullmatch(r"[a-z\-]+\.[A-Z]{2}", query or "") else f"all:{query}"
-        r = get("https://export.arxiv.org/api/query?" + urlencode({"search_query": qs, "sortBy": "submittedDate", "sortOrder": "descending", "max_results": 30}))
+        r = get("https://export.arxiv.org/api/query?" + urlencode({"search_query": arxiv_search(query), "sortBy": "submittedDate", "sortOrder": "descending", "max_results": 250}))
         return parse_feed(r.content), None, None
     if kind == "hf_papers":
         r = get("https://huggingface.co/api/daily_papers"); arts = []
@@ -200,10 +206,14 @@ def fetch_full_text(url):
     text, title = extract_page(r.text, str(r.url))
     return text, title
 
-MAX_PER_FETCH = 40      # a feed with years of archive (some publish 1,000+ posts) brings in its newest posts, not all of them
+MAX_PER_FETCH = 40      # always keep at least this many of a feed's newest posts
+MAX_AGE_DAYS = 60       # ...and everything newer than this, so trends have about eight weeks of history from the first fetch
+MAX_PER_SOURCE = 150    # but never more than this: a feed with years of archive (some publish 1,000+ posts) brings in its recent part only
 
-def newest(arts, n=MAX_PER_FETCH):
-    return sorted(arts, key=lambda a: -(a.get("published") or 0))[:n]
+def newest(arts, n=MAX_PER_FETCH, age_days=MAX_AGE_DAYS, cap=MAX_PER_SOURCE):   # arXiv sources pass a larger cap
+    ordered = sorted(arts, key=lambda a: -(a.get("published") or 0))
+    cutoff = db.now() - age_days * 86400
+    return ordered[:max(n, min(cap, sum(1 for a in ordered if (a.get("published") or 0) >= cutoff)))]
 
 def refresh_source(sid):
     src = db.q("SELECT * FROM sources WHERE id=?", (sid,), one=True)
@@ -211,7 +221,7 @@ def refresh_source(sid):
     added = 0
     try:
         arts, etag, lm = fetch_source(src)
-        for a in newest(arts):
+        for a in newest(arts, cap=250 if src["kind"] == "arxiv" else MAX_PER_SOURCE):
             u = canon(a["url"]) if "#v" not in a["url"] else a["url"]
             if db.q("SELECT 1 FROM articles WHERE url=?", (u,)): continue
             if not a.get("title"): continue

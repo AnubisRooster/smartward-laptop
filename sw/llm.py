@@ -32,14 +32,17 @@ def _kwargs(model):
     elif db.get_setting("api_key"): kw["api_key"] = db.get_setting("api_key")
     return kw
 
+ANALYSIS_FEATURES = {"graph", "developments", "implications", "analysis"}     # reading articles for what they mean, as opposed to summaries and the daily digest
+
 def pick_model(private=False, feature="chat"):
     """Background work falls back to the local model once the cloud budget is spent; private never leaves.
-    An OpenRouter model answers chat only, unless Settings says "everything": free models are rate-limited and may keep what they are sent."""
-    model = db.get_setting("model")
-    if model.startswith("openrouter/") and feature != "chat" and (db.get_setting("cloud_scope") or "chat") == "chat":
-        return db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
-    if not _is_local(model) and (private or budget_left() <= 0):
-        return db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
+    An OpenRouter model answers chat, and (by default) the analysis of public articles; "chat only" keeps everything else local, and "everything" sends it all.
+    Free models are rate-limited and may keep what they are sent, which is why private content never goes."""
+    model = db.get_setting("model"); local = db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
+    if model.startswith("openrouter/") and feature != "chat":
+        scope = db.get_setting("cloud_scope") or "analysis"
+        if not (scope == "everything" or (scope == "analysis" and feature in ANALYSIS_FEATURES)): return local
+    if not _is_local(model) and (private or budget_left() <= 0): return local
     return model
 
 def chat(messages, feature="chat", private=False, tools=None, tool_choice=None, model=None, temperature=0.3, timeout=300):

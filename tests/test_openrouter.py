@@ -42,15 +42,21 @@ class CatalogTests(unittest.TestCase):
 class UseTests(unittest.TestCase):
     def setUp(self): h.reset(); db.set_setting("model", "openrouter/meta-llama/llama-3.3-70b-instruct:free")
 
-    def test_openrouter_answers_chat_but_background_work_stays_local(self):
+    def test_by_default_openrouter_answers_chat_and_reads_articles_for_analysis_but_not_summaries(self):
         self.assertTrue(llm.pick_model(False, "chat").startswith("openrouter/"))
-        for f in ("summary", "graph", "digest", "brief"): self.assertTrue(llm.pick_model(False, f).startswith("ollama"), f)
+        for f in ("graph", "developments", "implications"): self.assertTrue(llm.pick_model(False, f).startswith("openrouter/"), f)
+        for f in ("summary", "digest", "brief"): self.assertTrue(llm.pick_model(False, f).startswith("ollama"), f)
+
+    def test_chat_only_keeps_everything_else_local(self):
+        db.set_setting("cloud_scope", "chat")
+        self.assertTrue(llm.pick_model(False, "chat").startswith("openrouter/"))
+        for f in ("graph", "summary", "digest", "brief", "developments"): self.assertTrue(llm.pick_model(False, f).startswith("ollama"), f)
 
     def test_everything_can_be_chosen(self):
         db.set_setting("cloud_scope", "everything"); self.assertTrue(llm.pick_model(False, "summary").startswith("openrouter/"))
 
     def test_private_and_off_the_record_never_leave(self):
-        db.set_setting("cloud_scope", "everything"); self.assertTrue(llm.pick_model(True, "chat").startswith("ollama"))
+        db.set_setting("cloud_scope", "everything"); self.assertTrue(llm.pick_model(True, "chat").startswith("ollama")); self.assertTrue(llm.pick_model(True, "graph").startswith("ollama"))
 
     def test_the_key_is_passed_through_and_free_models_cost_nothing(self):
         db.set_setting("api_key", "sk-or-test")

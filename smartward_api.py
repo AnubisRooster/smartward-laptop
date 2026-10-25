@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -295,6 +295,50 @@ def remote_tailscale(): return tailscale.info()
 
 @app.post("/api/remote/revoke")
 def remote_revoke(body: dict): remote.revoke(str(body.get("id", "all"))); return remote_status()
+
+# ---------- signals: what is shifting ----------
+@app.get("/api/domains")
+def domains_list(): return signals.domains()
+
+@app.post("/api/domains")
+def domains_add(body: dict):
+    name = str(body.get("name", "")).strip(); kws = [str(k).strip() for k in body.get("keywords", []) if str(k).strip()]
+    if not name or not kws: bad("Give the domain a name and at least one keyword.")
+    return {"id": db.x("INSERT INTO domains(name,keywords,created) VALUES(?,?,?)", (name[:80], json.dumps(kws[:30]), db.now()))}
+
+@app.put("/api/domains/{did}")
+def domains_edit(did: int, body: dict):
+    if "name" in body and str(body["name"]).strip(): db.x("UPDATE domains SET name=? WHERE id=?", (str(body["name"]).strip()[:80], did))
+    if "keywords" in body:
+        kws = [str(k).strip() for k in body["keywords"] if str(k).strip()]
+        if not kws: bad("A domain needs at least one keyword.")
+        db.x("UPDATE domains SET keywords=? WHERE id=?", (json.dumps(kws[:30]), did))
+    return {"ok": True}
+
+@app.delete("/api/domains/{did}")
+def domains_del(did: int): db.x("DELETE FROM domains WHERE id=?", (did,)); return {"ok": True}
+
+@app.get("/api/signals")
+def signals_get(domain: Optional[int] = None):
+    """Momentum, emerging / rising / cooling ideas, convergences and the adoption ladder, per domain (or all of them)."""
+    if domain is None: out = signals.overview()
+    else:
+        d = next((x for x in signals.domains() if x["id"] == domain), None)
+        if not d: bad("No such domain.", 404)
+        out = [signals.analyse(d)]
+    return {"domains": out, "articles": _evidence_titles(out), "generated": db.now()}
+
+def _evidence_titles(domains_):
+    """Title, link, source and date for every article a signal points to, so the page can show its evidence without more requests."""
+    ids = set()
+    for d in domains_:
+        ids.update(d.get("evidence", []))
+        for k in ("emerging", "rising", "cooling"):
+            for x in d.get(k, []): ids.update(x["evidence"]); ids.update(st["article_id"] for st in x["ladder"]["stages"])
+        for x in d.get("converging", []): ids.update(x["evidence"])
+    if not ids: return {}
+    rows = db.q(f"SELECT a.id,a.title,a.url,a.published,s.name source FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id IN ({','.join('?' * len(ids))})", list(ids))
+    return {str(r["id"]): {"title": r["title"], "url": r["url"], "published": r["published"], "source": r["source"]} for r in rows}
 
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)

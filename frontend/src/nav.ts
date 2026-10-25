@@ -1,6 +1,6 @@
 /** Where you are in the app, and how that is written in the address (`#/reading/12`) so Back, Forward and Reload work. */
-export type Tab = 'today' | 'reading' | 'graph' | 'chat' | 'projects' | 'settings';
-export const TABS: Tab[] = ['today', 'reading', 'graph', 'chat', 'projects', 'settings'];
+export type Tab = 'today' | 'reading' | 'radar' | 'graph' | 'chat' | 'projects' | 'settings';
+export const TABS: Tab[] = ['today', 'reading', 'radar', 'graph', 'chat', 'projects', 'settings'];
 
 export interface Place { tab: Tab; articleId: number | null; projectId: number | null; convId: number | null; themeId: number | null; sources: boolean }
 export const HOME: Place = { tab: 'today', articleId: null, projectId: null, convId: null, themeId: null, sources: false };
