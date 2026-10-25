@@ -6,6 +6,7 @@ import { speech, useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Modal, Field, inputCls, Spin, cx } from '../ui';
 import { ask, toast } from '../feedback';
 import { useHandsFree } from '../useHandsFree';
+import { plainForSpeech } from '../voiceInput';
 import { touch } from '../activity';
 import { wantAudioChat } from '../voiceIntent';
 import { Mic } from 'lucide-react';
@@ -127,7 +128,7 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
               {m.ts ? <time dateTime={new Date(m.ts * 1000).toISOString()} title={new Date(m.ts * 1000).toLocaleString()}>{ago(m.ts)}</time> : null}
               {m.role === 'assistant' && m.content && !m.meta?.streaming && <>
                 <button className="hover:text-zinc-300 focus:text-zinc-300" onClick={() => copy(m.content)}>Copy</button>
-                {speech.supported && <button className="hover:text-zinc-300 focus:text-zinc-300" onClick={() => speech.speak([m.content.replace(/\[R\d+\]/g, '')])}>🔊 Read</button>}
+                {speech.supported && <button className="hover:text-zinc-300 focus:text-zinc-300" onClick={() => speech.speak(plainForSpeech(m.content))}>🔊 Read</button>}
               </>}
               {m.meta?.cancelled && <span>stopped</span>}
             </div>

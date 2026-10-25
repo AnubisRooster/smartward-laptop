@@ -19,17 +19,44 @@ export function parseVoice(said: string, ctx: { pending: boolean }): VoiceCmd {
   return { kind: 'text', text: said.trim() };
 }
 
-/** An answer as spoken sentences: no Markdown marks, no [R1] citations, no code, links as their words. */
+const RULE = /^\s*(?:[-*_=]\s*){3,}$/;                         // --- *** ___ === - - -
+const TABLE_ROW = /^\s*\|.*\|\s*$|^[^|\n]+(?:\|[^|\n]+)+$/;     // | a | b |   or   a | b | c
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;   // |---|:--:|
+
+/** Tables become one spoken line per row ("Name, 12, fast."): the lines and bars are layout, not words. */
+function flattenTables(text: string): string {
+  const out: string[] = []; let inTable = false;
+  for (const line of text.split('\n')) {
+    if (TABLE_RULE.test(line) && line.includes('-') && (line.includes('|') || inTable)) continue;
+    if (TABLE_ROW.test(line) && line.includes('|')) {
+      const cells = line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim()).filter(Boolean);
+      if (cells.length) { out.push(cells.join(', ') + '.'); inTable = true; continue; }
+    }
+    inTable = false; out.push(line);
+  }
+  return out.join('\n');
+}
+
+/** An answer as spoken sentences: no Markdown marks, tables, rules, dashes or bars, no [R1] citations, no code, links as their words. */
 export function plainForSpeech(md: string): string[] {
-  const t = (md || '')
+  const t = flattenTables((md || '').replace(/\r/g, ''))
     .replace(/```[\s\S]*?```/g, ' (code omitted) ')
+    .split('\n').filter(l => !RULE.test(l)).join('\n')
     .replace(/\[R\d+\]/g, '')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, 'a link')
     .replace(/`([^`]*)`/g, '$1')
+    .replace(/\$\$?([^$\n]+)\$\$?/g, '$1')                      // inline maths: say k, not "dollar k dollar"
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, '')
+    .replace(/^\s*(?:[-*•+]|\d+[.)])\s+/gm, '')
     .replace(/(\*\*|__|\*|_)(\S[^*_]*?)\1/g, '$2')
+    .replace(/\s*(?:—|–|―|--+)\s*/g, ', ')                       // a dash used as a pause becomes a pause
+    .replace(/(\s)-(\s)/g, ', ')                                // " - " between words too; hyphens inside words stay
+    .replace(/\s*(?:->|=>|→|⇒)\s*/g, ' to ')
+    .replace(/[|~^]+/g, ' ')                                      // stray bars and marks
+    .replace(/\*+/g, '')
+    .replace(/\s+([.,;:!?])/g, '$1').replace(/,(\s*,)+/g, ',').replace(/\s+,/g, ',').replace(/,\s*([.!?])/g, '$1').replace(/^[,\s]+/gm, '')
     .replace(/[ \t]+/g, ' ');
-  return t.split(/\n{2,}|\n/).map(p => p.trim()).filter(Boolean);
+  return t.split(/\n{2,}|\n/).map(p => p.trim()).filter(p => /[\p{L}\p{N}]/u.test(p));
 }

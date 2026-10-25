@@ -167,3 +167,27 @@ describe('where the page finds the API', () => {
     expect(apiBase({ protocol: 'tauri:', port: '' })).toBe('http://localhost:8000');
   });
 });
+
+describe('answers read aloud: tables, rules and dashes', () => {
+  const said = (md: string) => plainForSpeech(md).join(' | ');
+  it('reads a table as rows, not as bars and dashes', () => {
+    const t = '| Method | Speedup | Cost |\n|---|:---:|---:|\n| EAGLE | 2.1x | low |\n| Medusa | 1.8x | medium |';
+    expect(plainForSpeech(t)).toEqual(['Method, Speedup, Cost.', 'EAGLE, 2.1x, low.', 'Medusa, 1.8x, medium.']);
+  });
+  it('reads a table without outer bars too', () => { expect(plainForSpeech('Name | Size\n--- | ---\nsmall | 3B')).toEqual(['Name, Size.', 'small, 3B.']); });
+  it('drops horizontal rules entirely', () => { expect(plainForSpeech('First point.\n\n---\n\nSecond point.\n***\n- - -\n___')).toEqual(['First point.', 'Second point.']); });
+  it('turns dashes used as pauses into pauses and keeps hyphens inside words', () => {
+    expect(said('Speculative decoding — when it helps – and when it doesn’t -- is subtle.')).toBe('Speculative decoding, when it helps, and when it doesn’t, is subtle.');
+    expect(said('Memory - the main limit - matters for trade-offs and 2-3x gains.')).toBe('Memory, the main limit, matters for trade-offs and 2-3x gains.');
+  });
+  it('says arrows as "to" and links as "a link", and drops stray bars and maths dollars', () => {
+    expect(said('Prefill -> decode, see https://arxiv.org/abs/2610.31667v1 for pass@$k$ | notes')).toBe('Prefill to decode, see a link for pass@k, notes.');
+  });
+  it('speaks a bulleted list of dash-led lines without the dashes', () => { expect(plainForSpeech('- first\n- second\n+ third')).toEqual(['first', 'second', 'third']); });
+  it('leaves nothing but marks as nothing', () => { expect(plainForSpeech('| | |\n|---|---|\n---')).toEqual([]); });
+  it('a typical model answer comes out clean', () => {
+    const md = '## Key ideas\n\n**1. Pruning** — keeps *diverse* candidates [R1].\n\n| Setting | Result |\n|---|---|\n| small k | worse |\n\n---\n\nSee [the paper](https://x.org/p) -> section 3.';
+    const out = plainForSpeech(md).join(' ');
+    expect(out).not.toMatch(/[|*#\[\]`]|--|—|https|R1/); expect(out).toContain('Pruning, keeps diverse candidates.'); expect(out).toContain('small k, worse.'); expect(out).toContain('See the paper to section 3.');
+  });
+});
