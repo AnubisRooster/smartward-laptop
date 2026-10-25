@@ -100,3 +100,46 @@ class FetchCapTests(unittest.TestCase):
         from sw import sources
         arts = [{"url": f"u{i}", "title": str(i)} for i in range(60)]
         self.assertEqual([a["title"] for a in sources.newest(arts, 3)], ["0", "1", "2"])
+
+
+class ConditionalFetchTests(unittest.TestCase):
+    """A feed that hasn't changed answers 304, which httpx counts as a 3xx. It must come back as "unchanged", not crash."""
+
+    def fetch(self, handler, **kw):
+        import httpx
+        from unittest import mock
+        real = httpx.Client
+        with mock.patch("sw.sources.httpx.Client", lambda **k: real(transport=httpx.MockTransport(handler), **k)), \
+             mock.patch("sw.sources.safe_url"), mock.patch("sw.sources._wait"):
+            return sources.get("https://feed.example/x.xml", **kw)
+
+    def test_not_modified_is_returned_as_is(self):
+        import httpx
+        r = self.fetch(lambda req: httpx.Response(304), etag='W/"1"', last_modified="Tue, 20 Oct 2026 05:34:48 GMT")
+        self.assertEqual(r.status_code, 304)
+
+    def test_the_conditional_headers_are_sent(self):
+        import httpx
+        seen = {}
+        def handler(req): seen.update(req.headers); return httpx.Response(304)
+        self.fetch(handler, etag='W/"1"', last_modified="x")
+        self.assertEqual((seen["if-none-match"], seen["if-modified-since"]), ('W/"1"', "x"))
+
+    def test_real_redirects_are_still_followed(self):
+        import httpx
+        def handler(req):
+            return httpx.Response(301, headers={"location": "https://feed.example/new.xml"}) if req.url.path == "/x.xml" else httpx.Response(200, text="<rss/>")
+        self.assertEqual(self.fetch(handler).text, "<rss/>")
+
+    def test_endless_redirects_are_refused(self):
+        import httpx
+        with self.assertRaises(sources.FetchError):
+            self.fetch(lambda req: httpx.Response(302, headers={"location": "https://feed.example/x.xml"}))
+
+    def test_a_redirect_to_a_private_address_is_refused(self):
+        import httpx
+        from unittest import mock
+        def handler(req): return httpx.Response(302, headers={"location": "http://127.0.0.1:8000/api/settings"})
+        real = httpx.Client
+        with mock.patch("sw.sources.httpx.Client", lambda **k: real(transport=httpx.MockTransport(handler), **k)), mock.patch("sw.sources._wait"):
+            with self.assertRaises(sources.FetchError): sources.get("https://feed.example/x.xml")

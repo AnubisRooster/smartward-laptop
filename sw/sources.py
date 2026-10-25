@@ -56,6 +56,10 @@ def robots_ok(url):
         _robots[base] = rp
     return rp.can_fetch(UA, url)
 
+def _redirects(r):
+    """True only for a redirect that says where to go. A 304 (not modified) is a 3xx too, but it is an answer, not a redirect."""
+    return r.status_code in (301, 302, 303, 307, 308) and "location" in r.headers
+
 def get(url, etag=None, last_modified=None, check_robots=False, tries=3):
     safe_url(url)
     if check_robots and not robots_ok(url): raise FetchError("The site's robots.txt asks automated readers to stay away.")
@@ -69,9 +73,9 @@ def get(url, etag=None, last_modified=None, check_robots=False, tries=3):
         try:
             with httpx.Client(follow_redirects=False, timeout=25, headers=hdr) as c:
                 r = c.get(url); hops = 0
-                while r.is_redirect and hops < 4:                       # follow redirects only to safe public hosts
+                while _redirects(r) and hops < 4:                       # follow redirects only to safe public hosts
                     nxt = urljoin(str(r.url), r.headers["location"]); safe_url(nxt); r = c.get(nxt); hops += 1
-                if r.is_redirect: raise FetchError("Too many redirects.")
+                if _redirects(r): raise FetchError("Too many redirects.")
         except FetchError: raise
         except httpx.TimeoutException: raise FetchError("The site took too long to answer.")
         except httpx.HTTPError as e: raise FetchError(f"Network problem: {e.__class__.__name__}")
