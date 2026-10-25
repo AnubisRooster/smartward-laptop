@@ -1,26 +1,21 @@
 import { useState } from 'react';
 import { errText, get, http, post } from '../api';
 import { speech, useLoad, useNav, useSpeech } from '../hooks';
+import { briefParts } from '../digestBrief';
 import { Badge, Btn, Card, Empty, Err, Spin, Title } from '../ui';
 
 export default function Today() {
   const { data, loading, error, reload, setData } = useLoad<any>('/digest');
-  const { data: unread } = useLoad<any>('/articles', { filter: 'unread', sort: 'relevant', limit: 5 });
   const { go, openArticle } = useNav(); const sp = useSpeech();
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const rebuild = async () => { setBusy(true); setErr(''); try { setData(await http.get('/digest', { params: { rebuild: true }, timeout: 300000 }).then(r => r.data)); } catch (e) { setErr(errText(e)); } setBusy(false); };
 
-  const brief = async () => {
-    const items: any[] = unread?.items || []; const rate = (await get('/settings')).voice_rate || 1;
-    const parts = items.flatMap((a, i) => [`Number ${i + 1}. ${a.title}. From ${a.source}.`, (a.teaser || '').split(/(?<=\.)\s/).slice(0, 2).join(' ')]);
-    speech.speak(parts.length ? ['Here is your brief.', ...parts] : ['You have no unread articles.'], rate);
-  };
-  const readDigest = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak(['Today’s digest.', ...(data?.clusters || []).flatMap((c: any) => [`${c.theme}.`, c.summary || c.articles.map((a: any) => a.title).join('. ')])], rate); };
+  const brief = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak(briefParts(data?.clusters || []), rate, '', 'today'); };
 
   const clusters: any[] = data?.clusters || [];
   return (
     <div className="h-full overflow-y-auto"><div className="mx-auto max-w-3xl p-5">
-      <Title right={<>{speech.supported && (sp.on ? <Btn onClick={() => speech.stop()}>■ Stop</Btn> : <><Btn onClick={brief}>🔊 Brief me</Btn>{clusters.length > 0 && <Btn onClick={readDigest}>🔊 Read digest</Btn>}</>)}<Btn onClick={rebuild} disabled={busy}>{busy ? <Spin /> : '↻'} Update</Btn></>}>Today</Title>
+      <Title right={<>{speech.supported && (sp.on && sp.owner === 'today' ? <Btn onClick={() => speech.stop()}>■ Stop</Btn> : <Btn onClick={brief} disabled={loading || clusters.length === 0} title="Reads the themes shown below">🔊 Brief me</Btn>)}<Btn onClick={rebuild} disabled={busy}>{busy ? <Spin /> : '↻'} Update</Btn></>}>Today</Title>
       <Err>{error || err}</Err>
       {loading && <div className="py-10 text-center"><Spin /></div>}
       {!loading && clusters.length === 0 && <Empty icon="☀" title="Nothing new yet">When articles are indexed they’re grouped by theme here, ranked by how much they touch your projects.

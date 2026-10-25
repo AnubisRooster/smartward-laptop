@@ -101,3 +101,18 @@ import { wantAudioChat, takeAudioChat } from '../voiceIntent';
 describe('audio chat on open', () => {
   it('is handed over once', () => { expect(takeAudioChat()).toBe(false); wantAudioChat(); expect(takeAudioChat()).toBe(true); expect(takeAudioChat()).toBe(false); });
 });
+
+import { briefParts } from '../digestBrief';
+describe('Today brief', () => {
+  const c = (theme: string, titles: string[], extra: any = {}) => ({ theme, articles: titles.map(title => ({ title })), ...extra });
+  it('says what is on the page, theme by theme', () => {
+    const p = briefParts([c('KV cache', ['A.', 'B'], { touches_project: true, summary: 'Eviction policies matter.' }), c('Speculative decoding', ['C', 'D', 'E', 'F'])]);
+    expect(p[0]).toBe('Here is your brief: 6 new articles across 2 themes.');
+    expect(p).toContain('First: KV cache, which touches your projects.'); expect(p).toContain('Eviction policies matter.');
+    expect(p).toContain('Last: Speculative decoding.'); expect(p).toContain('C. D. E.');
+  });
+  it('is honest when there is nothing', () => { expect(briefParts([])).toEqual(['There is nothing new on your Today page yet.']); });
+  it('does not read a hundred themes', () => {
+    const p = briefParts(Array.from({ length: 10 }, (_, i) => c('T' + i, ['x']))); expect(p.length).toBe(1 + 6 * 2 + 1); expect(p[p.length - 1]).toBe('And 4 more themes on the page.');
+  });
+});

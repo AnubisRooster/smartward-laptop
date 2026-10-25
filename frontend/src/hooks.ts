@@ -87,7 +87,7 @@ export function chunkForSpeech(text: string, max = 380): string[] {
 export const speech = {
   supported: typeof window !== 'undefined',
   browserVoices: typeof window !== 'undefined' && 'speechSynthesis' in window,
-  queue: [] as string[], idx: 0, on: false, paused: false, rate: 1, engine: '' as '' | 'kokoro' | 'browser', notice: '',
+  queue: [] as string[], idx: 0, on: false, owner: '', paused: false, rate: 1, engine: '' as '' | 'kokoro' | 'browser', notice: '',
   listeners: new Set<() => void>(),
   token: 0, flat: [] as { part: number; text: string }[], cursor: 0,
   audio: null as HTMLAudioElement | null, clips: new Map<number, Promise<string>>(), aborts: new Set<AbortController>(), cfg: null as SpeechConfig | null,
@@ -104,8 +104,9 @@ export const speech = {
       notice: wantsNatural ? 'The natural voice isn’t running, so the browser voice is reading. Start SmartWard from its menu icon to bring it back.' : '' };
   },
 
-  async speak(parts: string[], rate = 1, voice = '') {
-    speech.stop();
+  /** `owner` names the page that started it, so only that page shows controls for it. */
+  async speak(parts: string[], rate = 1, voice = '', owner = '') {
+    speech.stop(); speech.owner = owner;
     const queue = parts.filter(p => p.trim());
     if (!queue.length) return;
     const token = ++speech.token;

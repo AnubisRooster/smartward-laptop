@@ -22,7 +22,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
     return () => clearTimeout(t);
   }, [a?.id, a?.read]);
   // Keep the sentence being read in view.
-  useEffect(() => { if (sp.on) document.querySelector('.speaking')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [sp.idx, sp.on]);
+  useEffect(() => { if (sp.on && sp.owner.startsWith('article-')) document.querySelector('.speaking')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [sp.idx, sp.on]);
 
   const summarize = async (force: boolean) => {
     setSumBusy(true);
@@ -33,8 +33,9 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
   const paras = useMemo(() => (a?.text || '').split(/\n{1,}/).map((s: string) => s.trim()).filter(Boolean), [a?.text]);
   const sumParts = (): string[] => a?.summary ? a.summary_keys.flatMap(([k, l]: [string, string]) => (a.summary[k] || []).length ? [l + '.', ...a.summary[k]] : []) : [];
   const head = () => [a.title, `${a.source}.`];
-  const readAll = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak([...head(), ...sumParts(), ...(a.themes.length ? ['Themes: ' + a.themes.map((t: any) => t.name).join(', ')] : []), ...paras], rate); };
-  const readSummary = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak([...head(), ...sumParts()], rate); };
+  const mine = sp.on && sp.owner === 'article-' + id;
+  const readAll = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak([...head(), ...sumParts(), ...(a.themes.length ? ['Themes: ' + a.themes.map((t: any) => t.name).join(', ')] : []), ...paras], rate, '', 'article-' + id); };
+  const readSummary = async () => { const rate = (await get('/settings')).voice_rate || 1; speech.speak([...head(), ...sumParts()], rate, '', 'article-' + id); };
   const loadFull = async () => { try { await post(`/articles/${id}/full`); setTimeout(load, 2500); } catch (e) { setErr(errText(e)); } };
 
   if (!a) return <div className="p-6">{err ? <Err>{err}</Err> : <Spin />}</div>;
@@ -54,7 +55,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
 
         {speech.supported && (
           <div className="my-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Read aloud">
-            {!sp.on ? <><Btn small onClick={readAll}>🔊 Read aloud</Btn><Btn small onClick={readSummary}>🔊 Summary only</Btn></> :
+            {!mine ? <><Btn small onClick={readAll}>🔊 Read aloud</Btn><Btn small onClick={readSummary}>🔊 Summary only</Btn></> :
               <><Btn small onClick={() => sp.paused ? sp.resume() : sp.pause()}>{sp.paused ? '▶ Keep going' : '⏸ Pause'}</Btn><Btn small onClick={() => sp.skip(-1)}>⏮ Back</Btn><Btn small onClick={() => sp.skip(1)}>⏭ Skip</Btn><Btn small onClick={() => sp.stop()}>■ Stop</Btn></>}
             {sp.notice && <span className="basis-full text-xs text-amber-500">{sp.notice}</span>}
             </div>)}
@@ -71,7 +72,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
         <Err>{err}</Err>
         {a.stage_error && <div className="mb-2 text-xs text-amber-500">Note: {a.stage_error}</div>}
         {short && <Card className="mb-4 text-sm text-zinc-400">Only the headline and a short teaser were saved. <button className="text-indigo-400 underline" onClick={loadFull}>Load the full article</button></Card>}
-        <div className="prose-sw">{paras.map((p: string, i: number) => <p key={i} className={sp.on && sp.queue[sp.idx] === p ? 'speaking' : ''}>{p}</p>)}</div>
+        <div className="prose-sw">{paras.map((p: string, i: number) => <p key={i} className={mine && sp.queue[sp.idx] === p ? 'speaking' : ''}>{p}</p>)}</div>
       </div>
     </article>
   );
