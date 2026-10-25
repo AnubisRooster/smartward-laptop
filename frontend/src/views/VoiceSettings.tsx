@@ -12,7 +12,7 @@ const GROUPS: Record<string, string> = {
 const label = (v: string) => { const n = v.slice(3); return n.charAt(0).toUpperCase() + n.slice(1); };
 type Profile = { voice: string; rate: number };
 
-const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
+const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div id="voice" className="scroll-mt-16"><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
 const selectCls = 'rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm';
 

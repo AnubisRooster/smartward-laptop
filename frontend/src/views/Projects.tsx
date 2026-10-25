@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ago, del, errText, patch, post, put } from '../api';
 import { useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Spin, Title, cx } from '../ui';
+import { ask, toast } from '../feedback';
 import { AddSource } from './Sources';
 
 export default function Projects() {
@@ -48,7 +49,7 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
   return (
     <div className="h-full overflow-y-auto"><div className="mx-auto max-w-3xl space-y-4 p-5">
       <div className="flex items-start justify-between gap-2"><div><button className="mb-1 text-sm text-zinc-400 md:hidden" onClick={onBack}>← Projects</button><h1 className="text-xl font-semibold">{p.name}</h1><div className="text-sm text-zinc-400">{p.goal}</div></div>
-        <div className="flex gap-1.5"><Btn small onClick={() => go('chat', { projectId: id })}>✎ Chat about this</Btn><Btn small kind="danger" onClick={async () => { if (confirm('Delete this project?')) { await del(`/projects/${id}`); onChanged(); onBack(); } }}>Delete</Btn></div></div>
+        <div className="flex gap-1.5"><Btn small onClick={() => go('chat', { projectId: id })}>✎ Chat about this</Btn><Btn small kind="danger" onClick={async () => { if (await ask.confirm({ title: 'Delete this project?', body: 'Its brief, decisions, questions, actions and links are removed. Articles stay in your library.', confirmLabel: 'Delete', danger: true })) { await del(`/projects/${id}`); onChanged(); onBack(); } }}>Delete</Btn></div></div>
       <Err>{err}</Err>
 
       <Card>
@@ -73,7 +74,7 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
 
       <Card><div className="mb-2 flex items-center justify-between"><h2 className="font-medium">Links</h2><Btn small onClick={() => setAddSrc(true)}>+ Follow a source for this project</Btn></div>
         {p.links.map((l: any) => (<div key={l.id} className="flex items-center gap-2 py-1 text-sm"><Badge>{l.kind}</Badge>{l.private ? <Badge tone="amber">Private</Badge> : null}
-          <button className="min-w-0 flex-1 truncate text-left text-indigo-300 hover:underline" title="Edit link" onClick={() => { const u = prompt('Edit link', l.url); if (u && u !== l.url) run(() => put(`/links/${l.id}`, { url: u })); }}>{l.url}</button>
+          <button className="min-w-0 flex-1 truncate text-left text-indigo-300 hover:underline" title="Edit link" onClick={async () => { const u = await ask.prompt({ title: 'Edit link', label: 'Link', initial: l.url, confirmLabel: 'Save' }); if (u && u.trim() && u !== l.url) run(() => put(`/links/${l.id}`, { url: u.trim() })); }}>{l.url}</button>
           {l.kind === 'github' && <Btn small onClick={() => run(() => post(`/links/${l.id}/sync`))}>Sync docs</Btn>}{l.note && <span className="text-xs text-zinc-500">{l.note}</span>}<button className="text-zinc-600 hover:text-red-400" onClick={() => run(() => del(`/links/${l.id}`))}>✕</button></div>))}
         <form className="mt-2 flex gap-2" onSubmit={e => { e.preventDefault(); if (link.trim()) run(async () => { await post(`/projects/${id}/links`, { url: link }); setLink(''); }); }}>
           <input className={inputCls} value={link} onChange={e => setLink(e.target.value)} placeholder="https://… or https://github.com/owner/repo" /><Btn type="submit">Add link</Btn></form>

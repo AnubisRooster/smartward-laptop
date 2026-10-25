@@ -18,7 +18,8 @@ def bg(fn, *a): threading.Thread(target=fn, args=a, daemon=True).start()
 @app.get("/api/status")
 def status():
     pre = preflight()
-    return {"model": db.get_setting("model"), "articles": pipeline.counts()["all_articles"], "pipeline": {**pipeline.STATE, **pipeline.counts()}, "preflight": pre,
+    unread = db.q("SELECT COUNT(*) n FROM articles WHERE read=0 AND relevant=1 AND source_id IN (SELECT id FROM sources)", one=True)["n"]
+    return {"model": db.get_setting("model"), "articles": pipeline.counts()["all_articles"], "unread": unread, "pipeline": {**pipeline.STATE, **pipeline.counts()}, "preflight": pre,
             "onboarding_completed": bool(db.get_setting("onboarding_completed")), "lock_enabled": bool(db.get_setting("lock_enabled"))}
 
 def preflight():
@@ -136,6 +137,15 @@ def article(aid: int):
     r = _art_row(a); r.update(text=a["text"] or a["teaser"] or "", full_text=bool(a["full_text"]), summary=json.loads(a["summary"]) if a["summary"] else None,
                               themes=graph.article_themes(aid), summary_keys=pipeline.SUMMARY_KEYS, stage_error=a["stage_error"])
     return r
+
+@app.post("/api/articles/mark-read")
+def mark_read(body: dict):
+    """Mark many articles read (or unread again, for Undo)."""
+    try: ids = [int(i) for i in body.get("ids", [])][:500]
+    except (TypeError, ValueError): bad("ids must be a list of article ids.")
+    read = 1 if body.get("read", True) else 0
+    if ids: db.x(f"UPDATE articles SET read=? WHERE id IN ({','.join('?' * len(ids))})", [read] + ids)
+    return {"updated": len(ids)}
 
 @app.post("/api/articles/{aid}/summary")
 def make_summary(aid: int, force: bool = False):
@@ -285,6 +295,9 @@ def conv_send(cid: int, body: dict):
     try: chat.send(cid, body["text"])
     except ValueError as e: bad(str(e), 409)
     return {"ok": True}
+@app.post("/api/conversations/{cid}/cancel")
+def conv_cancel(cid: int):
+    return {"ok": chat.cancel(cid)}
 @app.delete("/api/conversations/{cid}")
 def conv_del(cid: int):
     db.x("DELETE FROM messages WHERE conv_id=?", (cid,)); db.x("DELETE FROM conversations WHERE id=?", (cid,)); return {"ok": True}

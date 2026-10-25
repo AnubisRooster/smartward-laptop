@@ -56,3 +56,20 @@ class SettingsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestsNeverTouchARealLibrary(unittest.TestCase):
+    """A test run once emptied a real library because a module imported `sw.db` before the temp folder was set."""
+
+    def test_the_library_in_use_is_a_temporary_one(self):
+        import os, tempfile
+        self.assertTrue(os.path.realpath(h.db.DB_PATH).startswith(os.path.realpath(tempfile.gettempdir())))
+        self.assertNotIn(".local/share/smartward", h.db.DB_PATH)
+
+    def test_importing_the_app_modules_first_is_still_safe(self):
+        import subprocess, sys
+        code = ("import sys; sys.path.insert(0, '.'); import tests.test_projects; from sw import db; "
+                "print(db.DB_PATH)")
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=h.ROOT, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("smartward-test-", out.stdout)

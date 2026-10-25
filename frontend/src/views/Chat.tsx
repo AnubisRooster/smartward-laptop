@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import { ago, del, errText, get, post } from '../api';
-import { speech, useLoad, useNav, useSpeech } from '../hooks';
+import { speech, useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Modal, Field, inputCls, Spin, cx } from '../ui';
+import { ask, toast } from '../feedback';
 
 export default function Chat() {
   const { convId, go } = useNav();
@@ -46,40 +49,69 @@ function NewConversation({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-function Cite({ text, sources }: { text: string; sources: any[] }) {
+/** Markdown from the model, sanitized; [R3] becomes a link to source 3. */
+function Rich({ text, sources }: { text: string; sources: any[] }) {
   const { openArticle } = useNav();
-  const parts = text.split(/(\[R\d+\])/g);
-  return <>{parts.map((p, i) => { const m = p.match(/^\[R(\d+)\]$/); const s = m && sources?.find(x => x.n === Number(m[1]));
-    return s ? <button key={i} className="mx-0.5 rounded bg-indigo-900/60 px-1 text-xs text-indigo-200 hover:bg-indigo-800" title={s.title} onClick={() => openArticle(s.article_id)}>{p}</button> : <span key={i}>{p}</span>; })}</>;
+  const md = text.replace(/\[R(\d+)\]/g, (_m, n) => `[R${n}](#cite-${n})`);
+  return (
+    <div className="md-body text-sm leading-relaxed">
+      <ReactMarkdown rehypePlugins={[rehypeSanitize]} components={{
+        a: ({ href, children }) => {
+          const m = href?.match(/^#cite-(\d+)$/); const s = m && sources?.find(x => x.n === Number(m[1]));
+          if (m) return s
+            ? <button className="mx-0.5 rounded bg-indigo-900/60 px-1 text-xs text-indigo-200 hover:bg-indigo-800" title={s.title} onClick={() => openArticle(s.article_id)}>{children}</button>
+            : <span className="text-xs text-zinc-500">{children}</span>;
+          return <a href={href} target="_blank" rel="noreferrer noopener" className="text-indigo-300 underline">{children}</a>;
+        },
+        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 list-disc pl-5">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 list-decimal pl-5">{children}</ol>,
+        code: ({ children }) => <code className="rounded bg-black/30 px-1 text-[0.85em]">{children}</code>,
+        pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded bg-black/30 p-2 text-xs">{children}</pre>,
+      }}>{md}</ReactMarkdown>
+    </div>
+  );
 }
 
 function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => void; onChanged: () => void }) {
-  const { data: c, reload } = useLoad<any>(`/conversations/${id}`, undefined, 900);
-  const { go } = useNav(); const sp = useSpeech();
+  const [fast, setFast] = useState(false);
+  const { data: c, reload } = useLoad<any>(`/conversations/${id}`, undefined, fast ? 900 : 5000);
+  const { go } = useNav();
   const [text, setText] = useState(''); const [err, setErr] = useState(''); const end = useRef<HTMLDivElement>(null);
   const { data: st } = useLoad<any>('/status');
   const running = c?.status === 'running';
+  useEffect(() => { setFast(!!running); }, [running]);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [c?.messages?.length, c?.messages?.[c?.messages?.length - 1]?.content]);
-  const send = async () => { const t = text.trim(); if (!t) return; setText(''); setErr(''); try { await post(`/conversations/${id}/send`, { text: t }); reload(); onChanged(); } catch (e) { setErr(errText(e)); setText(t); } };
+  const send = async () => { const t = text.trim(); if (!t) return; setText(''); setErr(''); setFast(true); try { await post(`/conversations/${id}/send`, { text: t }); reload(); onChanged(); } catch (e) { setErr(errText(e)); setText(t); } };
+  const stop = async () => { try { await post(`/conversations/${id}/cancel`); toast.info('Stopping…'); reload(); } catch (e) { setErr(errText(e)); } };
   const decide = async (aid: string, approved: boolean) => { try { await post(`/approvals/${aid}`, { approved }); reload(); } catch (e) { setErr(errText(e)); } };
+  const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.ok('Copied'); } catch { toast.error('Couldn’t copy'); } };
   if (!c) return <div className="p-6"><Spin /></div>;
   const pending = (c.approvals || []).filter((a: any) => a.status === 'pending');
   const msgs: any[] = c.messages || [];
-  const noKey = !st?.preflight?.ollama && String(st?.model || '').startsWith('ollama');
+  const ollamaDown = !st?.preflight?.ollama && String(st?.model || '').startsWith('ollama');
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-zinc-800 p-3"><button className="text-sm text-zinc-400 md:hidden" onClick={onBack}>←</button>
+      <div className="flex items-center gap-2 border-b border-zinc-800 p-3"><button className="text-sm text-zinc-400 md:hidden" aria-label="Back to conversations" onClick={onBack}>←</button>
         <div className="min-w-0 flex-1"><div className="truncate font-medium">{c.title}</div><div className="text-xs text-zinc-500">{c.mode}{c.off_record ? ' · off the record' : ''}</div></div>
-        <Btn small kind="ghost" onClick={async () => { if (confirm('Delete this conversation?')) { await del(`/conversations/${id}`); onChanged(); onBack(); } }}>Delete</Btn></div>
+        <Btn small kind="ghost" onClick={async () => { if (await ask.confirm({ title: 'Delete this conversation?', body: 'The messages are removed. Anything you saved to a project stays.', confirmLabel: 'Delete', danger: true })) { await del(`/conversations/${id}`); onChanged(); onBack(); } }}>Delete</Btn></div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" role="log" aria-live="polite">
-        {noKey && <Err>Ollama isn’t reachable, so the strategist can’t answer. Start it with <code>ollama serve</code>.</Err>}
+        {ollamaDown && <Err>Ollama isn’t reachable, so the strategist can’t answer. Start it with <code>ollama serve</code>.</Err>}
         {msgs.length === 0 && <Card className="text-sm text-zinc-400"><div className="mb-1 font-medium text-zinc-200">{c.blurb}</div>Ask anything. Answers cite your library as [R1], [R2]… and the strategist can search it, explore the graph, and — only after you approve — read a page or follow a source.</Card>}
         {msgs.map((m: any) => (
-          <div key={m.id} className={cx('max-w-[85%] rounded-xl px-3.5 py-2.5', m.role === 'user' ? 'ml-auto bg-indigo-600' : 'mr-auto bg-zinc-800')} aria-label={`${m.role === 'user' ? 'You' : 'Strategist'} said`}>
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.role === 'assistant' ? <Cite text={m.content || '…'} sources={m.meta?.sources || []} /> : m.content}{m.meta?.streaming && m.id === msgs[msgs.length - 1].id && running && <span className="ml-1 animate-pulse">▍</span>}</div>
+          <div key={m.id} className={cx('group max-w-[85%] rounded-xl px-3.5 py-2.5', m.role === 'user' ? 'ml-auto bg-indigo-600' : 'mr-auto bg-zinc-800')} aria-label={`${m.role === 'user' ? 'You' : 'Strategist'} said`}>
+            {m.role === 'assistant' ? <Rich text={m.content || '…'} sources={m.meta?.sources || []} /> : <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.content}</div>}
+            {m.meta?.streaming && m.id === msgs[msgs.length - 1].id && running && <span className="ml-1 animate-pulse">▍</span>}
             {m.meta?.tools?.length > 0 && <div className="mt-2 space-y-0.5 text-[11px] text-zinc-400">{m.meta.tools.map((t: any, i: number) => <div key={i}>🛠 {t.tool}{t.args?.url ? ` ${t.args.url}` : ''}{t.auto ? ' (auto-approved)' : t.approved === false ? ' (declined)' : ''}</div>)}</div>}
             {m.role === 'assistant' && m.meta?.sources?.length > 0 && <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer">Sources ({m.meta.sources.length})</summary><ul className="mt-1 space-y-1">{m.meta.sources.map((s: any) => <li key={s.n}>[R{s.n}] <button className="text-indigo-300 hover:underline" onClick={() => go('reading', { articleId: s.article_id })}>{s.title}</button> <span className="text-zinc-500">— {s.why}</span></li>)}</ul></details>}
-            {m.role === 'assistant' && m.content && speech.supported && !m.meta?.streaming && <button className="mt-1 text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => speech.speak([m.content.replace(/\[R\d+\]/g, '')])}>🔊 Read</button>}
+            <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-500">
+              {m.ts ? <time dateTime={new Date(m.ts * 1000).toISOString()} title={new Date(m.ts * 1000).toLocaleString()}>{ago(m.ts)}</time> : null}
+              {m.role === 'assistant' && m.content && !m.meta?.streaming && <>
+                <button className="hover:text-zinc-300 focus:text-zinc-300" onClick={() => copy(m.content)}>Copy</button>
+                {speech.supported && <button className="hover:text-zinc-300 focus:text-zinc-300" onClick={() => speech.speak([m.content.replace(/\[R\d+\]/g, '')])}>🔊 Read</button>}
+              </>}
+              {m.meta?.cancelled && <span>stopped</span>}
+            </div>
           </div>))}
         {running && msgs[msgs.length - 1]?.role === 'user' && <div className="text-xs italic text-zinc-500"><Spin /> Strategist is thinking…</div>}
         <div ref={end} />
@@ -88,8 +120,13 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
         <div key={a.id} className="border-t border-amber-700/50 bg-amber-950/30 p-3"><div className="mb-1 text-sm font-medium text-amber-200">Approval needed · {a.title}</div><div className="mb-2 break-all text-sm text-zinc-300">{a.detail}</div>
           <div className="flex gap-2"><Btn kind="primary" small onClick={() => decide(a.id, true)}>Approve</Btn><Btn small onClick={() => decide(a.id, false)}>Decline</Btn></div></div>))}
       <div className="border-t border-zinc-800 p-3"><Err>{err}</Err>
-        <form onSubmit={e => { e.preventDefault(); send(); }} className="flex gap-2"><input value={text} onChange={e => setText(e.target.value)} disabled={running && pending.length > 0} placeholder={running ? 'Strategist is answering…' : 'Message the strategist'} aria-label="Message" className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-          <Btn type="submit" kind="primary" disabled={!text.trim() || running}>Send</Btn></form></div>
+        <form onSubmit={e => { e.preventDefault(); send(); }} className="flex items-end gap-2">
+          <textarea rows={Math.min(6, Math.max(1, text.split('\n').length))} value={text} onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!running) send(); } }}
+            disabled={running && pending.length > 0} placeholder={running ? 'Strategist is answering…' : 'Message the strategist (Shift+Enter for a new line)'} aria-label="Message"
+            className="flex-1 resize-none rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+          {running ? <Btn onClick={stop} kind="danger">Stop</Btn> : <Btn type="submit" kind="primary" disabled={!text.trim()}>Send</Btn>}
+        </form></div>
     </div>
   );
 }

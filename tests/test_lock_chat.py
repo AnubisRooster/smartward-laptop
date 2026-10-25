@@ -103,3 +103,39 @@ class StatusTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CancelTests(unittest.TestCase):
+    def setUp(self): h.reset()
+
+    def test_cancel_does_nothing_when_nothing_is_running(self):
+        cid = c.post("/api/conversations", json={"mode": "brainstorm"}).json()["id"]
+        self.assertEqual(c.post(f"/api/conversations/{cid}/cancel").json(), {"ok": False})
+
+    def test_cancel_stops_an_answer_but_keeps_what_was_written(self):
+        import threading, time
+        from sw import llm
+        cid = c.post("/api/conversations", json={"mode": "onboarding"}).json()["id"]    # no tools: goes straight to streaming
+        started = threading.Event(); gate = threading.Event()
+        def slow_stream(*a, **k):
+            yield "Part one. "; started.set()
+            gate.wait(5)
+            yield "Part two should never be saved."
+        original = llm.stream; llm.stream = slow_stream
+        try:
+            real = chat.build_context; chat.build_context = lambda conv, text: ([], "")
+            c.post(f"/api/conversations/{cid}/send", json={"text": "hello"})
+            self.assertTrue(started.wait(5))
+            self.assertTrue(c.post(f"/api/conversations/{cid}/cancel").json()["ok"])
+            gate.set()
+            for _ in range(50):
+                if c.get(f"/api/conversations/{cid}").json()["status"] == "idle": break
+                time.sleep(0.1)
+        finally:
+            llm.stream = original; chat.build_context = real
+        conv = c.get(f"/api/conversations/{cid}").json()
+        self.assertEqual(conv["status"], "idle")
+        last = conv["messages"][-1]
+        self.assertEqual(last["content"], "Part one. ")
+        self.assertTrue(last["meta"]["cancelled"])
+        self.assertNotIn(cid, chat._cancelled)

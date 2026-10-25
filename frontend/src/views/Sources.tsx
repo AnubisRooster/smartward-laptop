@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { del, errText, post, ago, patch } from '../api';
 import { useLoad } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Spin, Title } from '../ui';
+import { ask, toast } from '../feedback';
 
 const KINDS: [string, string, string][] = [
   ['rss', 'Blog / feed', 'A site’s RSS or Atom feed — or just its home page and SmartWard will look for the feed.'],
@@ -29,7 +30,7 @@ export default function Sources({ onClose }: { onClose: () => void }) {
           {s.last_status === 'error' && <div className="mt-2 rounded-lg border border-red-900/60 bg-red-950/30 p-2 text-xs"><div className="text-red-300">{s.last_error}</div><div className="mt-1 text-zinc-400">What to try: {tryThis(s.last_error || '')}</div></div>}</div>
           <div className="flex shrink-0 gap-1">{s.last_status === 'error' && <Btn small onClick={() => retry(s.id)} disabled={busy === s.id}>{busy === s.id ? <Spin /> : 'Retry'}</Btn>}
             <Btn small onClick={async () => { await patch(`/sources/${s.id}`, { enabled: s.enabled ? 0 : 1 }); reload(); }}>{s.enabled ? 'Pause' : 'Resume'}</Btn>
-            <Btn small kind="danger" onClick={async () => { if (confirm(`Stop following “${s.name}”? Its articles are removed from Reading.`)) { await del(`/sources/${s.id}`); reload(); } }}>Remove</Btn></div></div></Card>))}</div>
+            <Btn small kind="danger" onClick={async () => { if (await ask.confirm({ title: `Stop following “${s.name}”?`, body: 'Its articles are removed from Reading.', confirmLabel: 'Remove', danger: true })) { try { await del(`/sources/${s.id}`); toast.ok(`Removed “${s.name}”.`); } catch (e) { toast.error(errText(e)); } reload(); } }}>Remove</Btn></div></div></Card>))}</div>
       {adding && <AddSource onClose={() => { setAdding(false); reload(); }} />}
     </div></div>
   );
@@ -54,7 +55,7 @@ export function AddSource({ onClose, projectId }: { onClose: () => void; project
         <div className="flex justify-end gap-2"><Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" onClick={add} disabled={busy || (needsUrl ? !url : needsQuery ? !query : false)}>{busy ? <><Spin /> Checking…</> : 'Add'}</Btn></div>
         <hr className="border-zinc-800" />
         <Field label="Or save a single page (Add to SmartWard)"><div className="flex gap-2"><input className={inputCls} value={shareUrl} onChange={e => setShareUrl(e.target.value)} placeholder="https://…" /><Btn onClick={share} disabled={busy || !shareUrl}>Save</Btn></div></Field>
-        <div className="text-xs text-zinc-500">Tip: drag <a className="text-indigo-400 underline" href={bm} onClick={e => e.preventDefault()}>Add to SmartWard</a> to your bookmarks bar to save any page you’re reading.</div>
+        <div className="text-xs text-zinc-500">Tip: drag <a className="text-indigo-400 underline" href={bm} onClick={e => e.preventDefault()}>Add to SmartWard</a> to your bookmarks bar to save any page you’re reading, or <button type="button" className="text-indigo-400 underline" onClick={() => navigator.clipboard.writeText(bm).then(() => toast.ok('Bookmarklet copied. Paste it as the address of a new bookmark.'), () => toast.error('Couldn’t copy. Drag the link instead.'))}>copy it</button>. You can also drop a link onto this window.</div>
       </div>
     </Modal>
   );

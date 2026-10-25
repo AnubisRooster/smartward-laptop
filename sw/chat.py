@@ -89,6 +89,15 @@ def project_state(pid):
     items = "\n".join(f"- {i['kind']}{' (done)' if i['done'] else ''}: {i['text']}" for i in p["items"][:15])
     return f"Current project: {p['name']}\nGoal: {p['goal']}\nBrief:\n{p['brief']}\nItems:\n{items}"
 
+_cancelled = set()
+
+def cancel(conv_id):
+    """Stop the answer being written (what it has so far is kept). Returns False when nothing is running."""
+    if conv_id not in _running: return False
+    _cancelled.add(conv_id)
+    for r in db.q("SELECT id FROM approvals WHERE conv_id=? AND status='pending'", (conv_id,)): decide(r["id"], False)   # don't wait on a card
+    return True
+
 def send(conv_id, text):
     if conv_id in _running: raise ValueError("The strategist is still answering.")
     db.x("INSERT INTO messages(conv_id,role,content,ts) VALUES(?,?,?,?)", (conv_id, "user", text, db.now()))
@@ -107,7 +116,7 @@ def _turn(conv_id, user_text):
         msgs = [{"role": "system", "content": sysmsg}] + hist[-16:]
         tools = tool_defs(conv["mode"]); calls_log = []
         for rnd in range(3):
-            if not tools: break
+            if not tools or conv_id in _cancelled: break
             try: m = llm.chat(msgs, feature="chat", tools=tools, private=bool(conv["off_record"]))
             except Exception: break                                    # model without tool support: just answer
             tcs = getattr(m, "tool_calls", None)
@@ -128,18 +137,21 @@ def _turn(conv_id, user_text):
                 msgs.append({"role": "tool", "tool_call_id": t.id, "content": res})
         acc = ""
         for piece in llm.stream(msgs, feature="chat", private=bool(conv["off_record"])):
+            if conv_id in _cancelled: break
             acc += piece
             db.x("UPDATE messages SET content=? WHERE id=?", (acc, mid))
         used = [i + 1 for i in range(len(refs)) if f"[R{i+1}]" in acc]
         meta = {"sources": [{"n": i + 1, **{k: refs[i][k] for k in ("article_id", "title", "url", "why")}} for i in used] or
                            [{"n": i + 1, **{k: r[k] for k in ("article_id", "title", "url", "why")}} for i, r in enumerate(refs)][:3], "tools": calls_log}
-        db.x("UPDATE messages SET content=?, meta=? WHERE id=?", (acc or "(no answer)", json.dumps(meta), mid))
+        stopped = conv_id in _cancelled
+        if stopped: meta["cancelled"] = True
+        db.x("UPDATE messages SET content=?, meta=? WHERE id=?", (acc or ("(stopped)" if stopped else "(no answer)"), json.dumps(meta), mid))
         if conv["off_record"] == 0 and acc: threading.Thread(target=_graph_from_turn, args=(user_text, acc), daemon=True).start()
     except Exception as e:
         db.x("UPDATE messages SET content=?, meta=? WHERE id=?", (f"Sorry — that failed: {e}", json.dumps({"error": True}), mid))
     finally:
         db.x("UPDATE conversations SET status='idle', updated=? WHERE id=?", (db.now(), conv_id))
-        _running.discard(conv_id)
+        _running.discard(conv_id); _cancelled.discard(conv_id)
         c = db.q("SELECT title FROM conversations WHERE id=?", (conv_id,), one=True)
         if c and c["title"] in [v[0] for v in MODES.values()]:
             db.x("UPDATE conversations SET title=? WHERE id=?", (user_text[:60], conv_id))

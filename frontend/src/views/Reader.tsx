@@ -2,12 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { get, patch, post, errText } from '../api';
 import { speech, useNav, useSpeech } from '../hooks';
 import { Badge, Btn, Card, Err, Spin } from '../ui';
+import { toast } from '../feedback';
 
 export default function Reader({ id, onBack, onChanged }: { id: number; onBack: () => void; onChanged: () => void }) {
   const [a, setA] = useState<any>(null); const [err, setErr] = useState(''); const [sumBusy, setSumBusy] = useState(false);
   const sp = useSpeech(); const { go } = useNav();
-  const load = async () => { try { const r = await get(`/articles/${id}`); setA(r); setErr(''); if (!r.read) { patch(`/articles/${id}`, { read: true }).then(onChanged); } return r; } catch (e) { setErr(errText(e)); } };
-  useEffect(() => { setA(null); load().then(r => { if (r && !r.summary && r.relevant !== undefined) summarize(false); }); return () => { speech.stop(); }; }, [id]);
+  const load = async () => { try { const r = await get(`/articles/${id}`); setA(r); setErr(''); return r; } catch (e) { setErr(errText(e)); } };
+  useEffect(() => {
+    setA(null);
+    // Write the summary by itself only with a local model: a paid model should be asked for first.
+    load().then(async r => { if (r && !r.summary && r.relevant !== undefined && String((await get('/settings')).model || '').startsWith('ollama')) summarize(false); });
+    return () => { speech.stop(); };
+  }, [id]);
+  // Opening an article doesn't mark it read; reading it for a few seconds does.
+  useEffect(() => {
+    if (!a || a.read) return;
+    const t = setTimeout(() => { patch(`/articles/${id}`, { read: true }).then(() => { setA((x: any) => x && { ...x, read: true }); onChanged(); }).catch(() => {}); }, 8000);
+    return () => clearTimeout(t);
+  }, [a?.id, a?.read]);
+  // Keep the sentence being read in view.
+  useEffect(() => { if (sp.on) document.querySelector('.speaking')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [sp.idx, sp.on]);
 
   const summarize = async (force: boolean) => {
     setSumBusy(true);
@@ -30,8 +44,8 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
       <div className="mx-auto max-w-2xl px-5 py-4">
         <div className="mb-3 flex items-center justify-between"><button className="text-sm text-zinc-400 hover:text-white md:hidden" onClick={onBack}>← Back</button><span className="hidden md:block" />
           <div className="flex gap-1.5">
-            <Btn small onClick={async () => { await patch(`/articles/${id}`, { starred: !a.starred }); load(); onChanged(); }}>{a.starred ? '★ Starred' : '☆ Star'}</Btn>
-            <Btn small onClick={async () => { await patch(`/articles/${id}`, { read: !a.read }); load(); onChanged(); }}>{a.read ? 'Mark unread' : 'Mark read'}</Btn>
+            <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { starred: !a.starred }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.starred ? '★ Starred' : '☆ Star'}</Btn>
+            <Btn small onClick={async () => { try { await patch(`/articles/${id}`, { read: !a.read }); load(); onChanged(); } catch (e) { toast.error(errText(e)); } }}>{a.read ? 'Mark unread' : 'Mark read'}</Btn>
             <a href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700">Open original ↗</a></div></div>
         <h1 className="text-2xl font-semibold leading-tight">{a.title}</h1>
         <div className="mt-1 text-sm text-zinc-500">{a.source}{a.author ? ` · ${a.author}` : ''}{a.published ? ` · ${new Date(a.published * 1000).toLocaleDateString()}` : ''}{a.relevance != null && ` · ${Math.round(a.relevance * 100)}% relevant`}</div>
@@ -41,7 +55,7 @@ export default function Reader({ id, onBack, onChanged }: { id: number; onBack: 
             {!sp.on ? <><Btn small onClick={readAll}>🔊 Read aloud</Btn><Btn small onClick={readSummary}>🔊 Summary only</Btn></> :
               <><Btn small onClick={() => sp.paused ? sp.resume() : sp.pause()}>{sp.paused ? '▶ Keep going' : '⏸ Pause'}</Btn><Btn small onClick={() => sp.skip(-1)}>⏮ Back</Btn><Btn small onClick={() => sp.skip(1)}>⏭ Skip</Btn><Btn small onClick={() => sp.stop()}>■ Stop</Btn></>}
             {sp.notice && <span className="basis-full text-xs text-amber-500">{sp.notice}</span>}
-            <span className="text-xs text-zinc-600">Read aloud on this computer — text never leaves it.</span></div>)}
+            </div>)}
 
         <Card className="my-4">
           <div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold">Summary</div>

@@ -66,3 +66,22 @@ class ArticleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkReadTests(unittest.TestCase):
+    def setUp(self):
+        h.reset(); self.src = h.add_source("Blog")
+        self.ids = [h.add_article(self.src, f"Post {i}", "text") for i in range(3)]
+
+    def unread(self): return [a["id"] for a in c.get("/api/articles").json()["items"]]
+
+    def test_many_articles_can_be_marked_read_and_unread_again(self):
+        r = c.post("/api/articles/mark-read", json={"ids": self.ids[:2]})
+        self.assertEqual(r.json(), {"updated": 2})
+        self.assertEqual(self.unread(), [self.ids[2]])
+        c.post("/api/articles/mark-read", json={"ids": self.ids[:2], "read": False})
+        self.assertEqual(sorted(self.unread()), sorted(self.ids))
+
+    def test_bad_ids_are_refused_and_an_empty_list_is_fine(self):
+        self.assertEqual(c.post("/api/articles/mark-read", json={"ids": ["x"]}).status_code, 400)
+        self.assertEqual(c.post("/api/articles/mark-read", json={"ids": []}).json(), {"updated": 0})

@@ -17,6 +17,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-force-graph-2d": "^1.29.2",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
@@ -27,6 +29,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^5.0.5"
   }
 }

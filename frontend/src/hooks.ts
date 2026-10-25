@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { get, http } from './api';
+import { HOME, Place, Tab, hashFor, parseHash } from './nav';
 
-export type Tab = 'today' | 'reading' | 'graph' | 'chat' | 'projects' | 'settings';
+export type { Tab } from './nav';
 
-interface Nav {
-  tab: Tab; articleId: number | null; projectId: number | null; convId: number | null; themeId: number | null; sources: boolean;
-  go: (t: Tab, extra?: Partial<Nav>) => void;
+interface Nav extends Place {
+  go: (t: Tab, extra?: Partial<Place>) => void;
   openArticle: (id: number | null) => void;
 }
 export const useNav = create<Nav>((set) => ({
-  tab: 'today', articleId: null, projectId: null, convId: null, themeId: null, sources: false,
+  ...(parseHash(typeof location !== 'undefined' ? location.hash : '') || HOME),
   go: (tab, extra = {}) => set({ tab, sources: false, ...extra }),
   openArticle: (id) => set({ tab: 'reading', articleId: id, sources: false }),
 }));
+
+/** Keeps the address and the screen in step: Back, Forward and Reload land where you were. Call once. */
+export function useHashSync() {
+  useEffect(() => {
+    const place = (s: Place): Place => ({ tab: s.tab, articleId: s.articleId, projectId: s.projectId, convId: s.convId, themeId: s.themeId, sources: s.sources });
+    const fromAddress = () => { const p = parseHash(location.hash); if (p) useNav.setState(p); };
+    const toAddress = () => { const h = hashFor(place(useNav.getState())); if (location.hash !== h) location.hash = h; };
+    toAddress();
+    window.addEventListener('hashchange', fromAddress);
+    const unsubscribe = useNav.subscribe(toAddress);
+    return () => { window.removeEventListener('hashchange', fromAddress); unsubscribe(); };
+  }, []);
+}
 
 /** Fetch + refetch helper. `deps` re-run; `every` polls (ms). */
 export function useLoad<T = any>(url: string | null, params?: any, every?: number) {

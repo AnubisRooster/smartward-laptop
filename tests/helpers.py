@@ -13,10 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-DATA = tempfile.mkdtemp(prefix="smartward-test-")
-os.environ["SMARTWARD_DATA"] = DATA
-os.environ["OLLAMA_API_BASE"] = "http://127.0.0.1:9"
-atexit.register(shutil.rmtree, DATA, ignore_errors=True)
+from tests import DATA      # noqa: E402  (importing the package already pointed SmartWard at a temp folder)
 
 import smartward_api as api            # noqa: E402  (after the environment is set)
 from sw import db, llm, tts            # noqa: E402
@@ -28,9 +25,14 @@ client = TestClient(api.app)
 
 ALL_TABLES = api.TABLES + ["settings", "approvals"]
 
+# Belt and braces: never run against a real library, however the test modules were imported.
+if os.path.realpath(db.DB_PATH) != os.path.realpath(os.path.join(DATA, "smartward.db")):
+    raise RuntimeError(f"Refusing to run: the tests would use {db.DB_PATH}, not their own temporary library.")
+
 
 def reset():
     """Empty every table, so each test starts from a blank library."""
+    assert os.path.realpath(db.DB_PATH).startswith(os.path.realpath(tempfile.gettempdir())), "not a temporary library"
     with db.tx() as c:
         for t in ALL_TABLES:
             c.execute(f"DELETE FROM {t}")
