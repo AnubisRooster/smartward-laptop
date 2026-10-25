@@ -153,3 +153,35 @@ class SignalsApi(unittest.TestCase):
         turn_on(); sign_in()
         self.assertEqual(c.get("/api/signals", headers=VIA).status_code, 200); self.assertEqual(c.get("/api/domains", headers=VIA).status_code, 200)
         self.assertEqual(c.post("/api/domains", json={"name": "x", "keywords": ["y"]}, headers=VIA).status_code, 403)
+
+
+class Refinements(unittest.TestCase):
+    def setUp(self):
+        h.reset(); self.s1, self.s2, self.s3 = src("Blog A"), src("Blog B"), src("OpenAI"); background([self.s1, self.s2, self.s3])
+
+    def test_a_model_and_its_longer_name_are_not_a_convergence(self):
+        a, b = theme("GPT-6", "model"), theme("GPT-6 Astra", "model"); other = [theme("Other1"), theme("Other2")]
+        for i in range(3): art(self.s1, f"base {i}", 20 + i, [a, other[0]]); art(self.s2, f"base2 {i}", 25 + i, [b, other[1]])
+        for i in range(2): art(self.s3, f"meet {i}", 1 + i, [a, b])
+        self.assertEqual([p for p in signals.analyse({"name": "T", "keywords": []}, NOW)["converging"] if {p["a"], p["b"]} == {"GPT-6", "GPT-6 Astra"}], [])
+
+    def test_the_top_themes_always_show_what_the_domain_is_about_even_when_nothing_is_rising(self):
+        t = theme("Steady topic")
+        for w in range(8):
+            for k in range(2): art(self.s1, f"steady {w} {k}", w * 7 + 1 + k, [t])
+        r = signals.analyse({"name": "T", "keywords": []}, NOW)
+        self.assertIn("Steady topic", [x["name"] for x in r["top"]]); self.assertEqual([x for x in r["top"] if x["name"] == "Steady topic"][0]["label"], "steady")
+
+
+class SameThingDifferentSpelling(unittest.TestCase):
+    def test_canonical_names(self):
+        for a, b in (("KV cache", "Key-Value (KV) cache"), ("Large Language Models", "large language model"), ("vLLM", "VLLM"), ("Speculative decoding", "speculative  Decoding")): self.assertEqual(signals.canon(a), signals.canon(b), (a, b))
+        for a, b in (("Llama 3", "Llama 3.1"), ("GPT-6", "GPT-6 Astra"), ("Claude", "Claude Opus")): self.assertNotEqual(signals.canon(a), signals.canon(b), (a, b))
+
+    def test_variants_are_counted_as_one_theme_and_generic_ones_are_hidden(self):
+        h.reset(); s1, s2, s3 = src("Blog A"), src("Blog B"), src("Blog C"); background([s1, s2, s3])
+        names = ["KV cache", "Key-Value (KV) cache", "KV caches"]; ts_ = [theme(n) for n in names]; llm_ = [theme("Large Language Models"), theme("Large Language Model")]
+        for i in range(3): art((s1, s2, s3)[i], f"kv {i}", 1 + i, [ts_[i]] + [llm_[i % 2]])
+        r = signals.analyse({"name": "T", "keywords": []}, NOW); top = {x["name"]: x for x in r["top"]}
+        self.assertEqual(len([n for n in top if signals.canon(n) == "kv cache"]), 1); self.assertEqual(sum(x["recent"] for n, x in top.items() if signals.canon(n) == "kv cache"), 3)
+        self.assertFalse([n for n in top if signals.canon(n) == "large language model"])

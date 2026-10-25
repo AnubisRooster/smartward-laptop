@@ -14,7 +14,8 @@ WEEK = 7 * DAY
 RECENT_DAYS = 14                    # "now"
 BASE_DAYS = 42                      # what it is compared with: the 6 weeks before that
 MIN_RECENT = 3                      # fewer articles than this is never a trend
-GENERIC = {"ai", "llm", "llms", "python", "machine learning", "artificial intelligence", "gpu", "software", "openai", "anthropic", "google", "meta", "microsoft", "nvidia"}
+GENERIC = {"ai", "llm", "python", "machine learning", "artificial intelligence", "gpu", "software", "openai", "anthropic", "google", "meta", "microsoft", "nvidia",
+           "large language model", "transformer", "neural network", "deep learning", "language model", "model", "benchmark", "chatgpt", "api"}      # canonical names (see canon)
 LABS = ("openai", "deepmind", "google research", "anthropic", "nvidia", "microsoft research", "hugging face", "together ai", "databricks", "allen institute", "meta ai", "mistral", "cohere")
 LADDER = ["paper", "release", "lab", "blog"]       # how an idea usually travels, with "blog" meaning commentary and adoption chatter
 
@@ -44,6 +45,14 @@ def domains():
 
 
 # ---------- small pure helpers ----------
+def canon(name):
+    """One key for the ways the same thing gets written: case, plurals, "(KV)" asides, "key-value" for "kv"."""
+    n = re.sub(r"\([^)]*\)", " ", (name or "").lower()).replace("key-value", "kv").replace("key value", "kv")
+    words = [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in re.split(r"[\s\-_/]+", n) if w]
+    return " ".join(words)
+
+
+
 def source_class(kind, name=""):
     n = (name or "").lower()
     if kind in ("arxiv", "hf_papers"): return "paper"
@@ -97,10 +106,14 @@ def load(now):
         "WHERE a.published BETWEEN ? AND ?", (lo, hi))}
     for a in arts.values(): a["cls"] = source_class(a["skind"], a["sname"]); a["text"] = ((a["title"] or "") + " " + (a["teaser"] or "")).lower()
     themes = {t["id"]: t for t in db.q("SELECT id,name,type FROM themes")}
+    mentions = [m for m in db.q("SELECT article_id,theme_id FROM mentions WHERE source_kind='article'") if m["article_id"] in arts and m["theme_id"] in themes]
+    uses = defaultdict(int)
+    for m in mentions: uses[m["theme_id"]] += 1
+    rep = {}                                                      # variants of one thing count as one theme, named by its most used spelling
+    for tid in sorted(themes, key=lambda t: (-uses[t], t)): rep.setdefault(canon(themes[tid]["name"]), tid)
     by_article = defaultdict(set)
-    for m in db.q("SELECT article_id,theme_id FROM mentions WHERE source_kind='article'"):
-        if m["article_id"] in arts and m["theme_id"] in themes: by_article[m["article_id"]].add(m["theme_id"])
-    return arts, themes, by_article
+    for m in mentions: by_article[m["article_id"]].add(rep[canon(themes[m["theme_id"]]["name"])])
+    return arts, {t: themes[t] for t in set(rep.values())}, by_article
 
 
 MIN_BASE_DAYS = 14          # a source needs this much of the baseline period to say what is normal for it
@@ -174,7 +187,7 @@ def analyse(domain=None, now=None, data=None):
         pool_totals[sid] = {"eligible": t["eligible"] and (pb + pr) > 0, "base_total": pb, "recent_total": pr}
     items = []
     for t, b in inside.items():
-        th = themes[t]; generic = th["name"].lower() in GENERIC or doc_freq[t] / total_graphed > 0.15
+        th = themes[t]; generic = canon(th["name"]) in GENERIC or doc_freq[t] / total_graphed > 0.15
         if generic or len(b["all"]) < 2: continue
         o, e, s_, _ = compare(by_src(b["recent"]), by_src(b["base"]), pool_totals)
         srcs = {pool[i]["source_id"] for i in b["recent"]}; classes = {pool[i]["cls"] for i in b["recent"]}
@@ -182,6 +195,8 @@ def analyse(domain=None, now=None, data=None):
         ev = sorted(b["recent"] or b["all"], key=lambda i: -(pool[i]["published"] or 0))[:5]
         items.append({"theme_id": t, "name": th["name"], "type": th["type"], "label": lab, "recent": len(b["recent"]), "baseline": len(b["base"]), "score": round(s_, 2),
                       "sources": len(srcs), "source_kinds": sorted(classes), "first_seen": first_seen_theme.get(t), "evidence": ev, "ladder": ladder(t, by_article, arts, graphed)})
+    out["top"] = [{k: x[k] for k in ("theme_id", "name", "type", "label", "recent", "baseline", "sources", "source_kinds", "evidence")}
+                  for x in sorted(items, key=lambda x: (-x["recent"], -x["baseline"]))[:10] if x["recent"] > 0]
     for key in ("emerging", "rising", "cooling"):
         out[key] = sorted([x for x in items if x["label"] == key], key=lambda x: (-x["score"] if key != "cooling" else x["score"], -x["recent"]))[:8]
     out["converging"] = convergence(pool, by_article, themes, recent, base, doc_freq, total_graphed)
@@ -209,7 +224,7 @@ def ladder(theme_id, by_article, arts, graphed):
 
 def convergence(pool, by_article, themes, recent, base, doc_freq, total_graphed):
     """Pairs of ideas that had not appeared together before and now do, especially when they came from separate clusters."""
-    ok = lambda t: themes[t]["name"].lower() not in GENERIC and doc_freq[t] / total_graphed <= 0.15
+    ok = lambda t: canon(themes[t]["name"]) not in GENERIC and doc_freq[t] / total_graphed <= 0.15
     co_recent, co_base, presence = defaultdict(set), defaultdict(int), defaultdict(int)
     for i in pool:
         ts_ = [t for t in by_article.get(i, ()) if ok(t)]
@@ -223,8 +238,9 @@ def convergence(pool, by_article, themes, recent, base, doc_freq, total_graphed)
         if n >= 2: dsu.union(a, b)
     for t in presence: size[dsu.find(t)] += 1
     out = []
+    same_family = lambda x, y: (lambda p, q: p in q or q in p)(themes[x]["name"].lower().strip(), themes[y]["name"].lower().strip())      # "GPT-6" and "GPT-6 Astra" are one thing, not a convergence
     for (a, b), ids in co_recent.items():
-        if len(ids) < 2 or co_base.get((a, b), 0) > 0 or presence[a] < 2 or presence[b] < 2: continue
+        if len(ids) < 2 or co_base.get((a, b), 0) > 0 or presence[a] < 2 or presence[b] < 2 or same_family(a, b): continue
         bridge = dsu.find(a) != dsu.find(b) and size[dsu.find(a)] >= 3 and size[dsu.find(b)] >= 3
         out.append({"a": themes[a]["name"], "b": themes[b]["name"], "a_id": a, "b_id": b, "together": len(ids), "bridge": bridge, "evidence": sorted(ids, key=lambda i: -(pool[i]["published"] or 0))[:4]})
     out.sort(key=lambda x: (-x["bridge"], -x["together"]))
