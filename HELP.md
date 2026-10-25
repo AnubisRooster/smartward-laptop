@@ -132,6 +132,14 @@ tailscale serve --bg 127.0.0.1:8000
 
 Never use `tailscale funnel`: that is public. (If you also run Selfward, it uses its own port: `tailscale serve --bg --https=8443 127.0.0.1:8100`.)
 
+If Tailscale answers **"Serve is not enabled on your tailnet"**, open the link it prints (signed in to your Tailscale account) and enable Serve once, then run the command again. If it says **"Access denied: serve config denied"**, run this once, which lets your user manage Tailscale without sudo, and then repeat the `tailscale serve` command:
+
+```bash
+sudo tailscale set --operator=$USER
+```
+
+(Running the command with `sudo` also works, but the Settings card reads Tailscale's status as you, so the one-time setting is better.)
+
 4. Tick **Allow my phone to connect**. A QR code and the address appear (`https://<laptop>.<tailnet>.ts.net`).
 5. On the phone, with Tailscale connected, scan the code or open the address, sign in with the passphrase, then **Add to Home Screen** (iPhone: Share → Add to Home Screen; Android: menu → Install app).
 
