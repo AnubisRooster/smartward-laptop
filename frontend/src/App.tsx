@@ -8,6 +8,7 @@ import Palette from './Palette';
 import Links from './Links';
 import { onPhone } from './device';
 import RemoteSignIn, { PhoneAccount } from './RemoteSignIn';
+import { HelpHost } from './HelpGuide';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
@@ -121,6 +122,7 @@ export default function App() {
       <Shortcuts />
       <Palette lockOn={lockOn} />
       <Links />
+      <HelpHost />
       <FeedbackHost />
     </div>
   );

@@ -25,6 +25,13 @@ async def front_door(request: Request, call_next):
 def bad(msg, code=400): raise HTTPException(code, msg)
 def bg(fn, *a): threading.Thread(target=fn, args=a, daemon=True).start()
 
+# ---------- the help guide ----------
+@app.get("/api/help")
+def help_guide():
+    """HELP.md, shown in the app (Settings → Help guide) and readable on its own in the program folder."""
+    try: return {"markdown": open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "HELP.md"), encoding="utf-8").read()}
+    except OSError: bad("The help guide (HELP.md) wasn't found next to the program.", 404)
+
 # ---------- status / settings ----------
 @app.get("/api/status")
 def status():

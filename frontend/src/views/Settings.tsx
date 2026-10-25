@@ -6,6 +6,7 @@ import { ask, toast } from '../feedback';
 import VoiceSettings from './VoiceSettings';
 import DesktopSettings from './DesktopSettings';
 import RemoteSettings from './RemoteSettings';
+import { openHelp } from '../HelpGuide';
 import { readPref, setPref, ThemePref } from '../theme';
 
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
@@ -29,7 +30,7 @@ export default function Settings() {
 
   return (
     <div className="h-full overflow-y-auto"><div className="mx-auto max-w-2xl space-y-4 p-5">
-      <Title right={<span className="text-xs text-emerald-400" role="status">{msg}</span>}>Settings</Title><Err>{err}</Err>
+      <Title right={<><span className="text-xs text-emerald-400" role="status">{msg}</span><Btn small onClick={() => openHelp()}>Help guide</Btn></>}>Settings</Title><Err>{err}</Err>
       <nav aria-label="Settings sections" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 bg-zinc-950/90 px-1 py-2 backdrop-blur">{SECTIONS.map(t => <a key={t} href={'#' + slug(t)} onClick={e => { e.preventDefault(); document.getElementById(slug(t))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="rounded-full border border-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100">{t}</a>)}</nav>
 
       <Appearance />

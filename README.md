@@ -2,6 +2,10 @@
 
 Local-first research strategist, ported from the iPhone app. Everything runs on this laptop.
 
+## Help guide
+
+Install steps, setup, voice, free models, phone access, updating and troubleshooting are in [HELP.md](HELP.md), also shown in the app: **Settings → Help guide**.
+
 ## Run
 
 - Open **SmartWard** from the applications menu (or `~/SmartWardApp/bin/start_smartward.sh`). It is its own window with its own icon, not a browser tab.

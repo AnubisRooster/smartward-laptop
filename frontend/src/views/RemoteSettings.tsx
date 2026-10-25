@@ -5,6 +5,7 @@ import { useLoad } from '../hooks';
 import { Badge, Btn, Card, Err, Field, inputCls } from '../ui';
 import { toast } from '../feedback';
 import { ago } from '../api';
+import { openHelp } from '../HelpGuide';
 
 const Step = ({ ok, children }: { ok: boolean | null; children: any }) => <li className="flex items-start gap-2 text-sm"><span aria-hidden className={ok ? 'text-emerald-400' : 'text-zinc-500'}>{ok ? '✓' : '○'}</span><span>{children}</span></li>;
 
@@ -23,7 +24,7 @@ export default function RemoteSettings() {
   return (
     <Card className="space-y-3">
       <div id="remote-access" className="scroll-mt-16"><h2 className="font-medium">Remote access (phone)</h2>
-        <div className="text-xs text-zinc-500">Open SmartWard from your Android phone or iPhone in its browser, over your private Tailscale network. It is never on the public internet, and you add it to the Home Screen like an app (no app store). Your laptop must be awake and running SmartWard.</div></div>
+        <div className="text-xs text-zinc-500">Open SmartWard from your Android phone or iPhone in its browser, over your private Tailscale network. It is never on the public internet, and you add it to the Home Screen like an app (no app store). Your laptop must be awake and running SmartWard. <button className="text-indigo-300 underline" onClick={() => openHelp('open-it-from-your-phone-tailscale')}>Step-by-step guide</button>.</div></div>
       <Err>{err}</Err>
 
       <ol className="space-y-1.5">
