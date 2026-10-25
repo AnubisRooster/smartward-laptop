@@ -187,6 +187,11 @@ function OpenRouter({ s, model, save }: { s: any; model: string; save: (v: any) 
           {shown.length === 0 && <li className="text-xs text-zinc-500">No free model matches.</li>}</ul>}
         {list && <div className="text-xs text-zinc-500">“No tools” models can chat but can’t search your library or fetch pages for you.</div>}
         {current && <Row><span>Use it for</span><Seg value={s.cloud_scope || 'analysis'} onChange={x => save({ cloud_scope: x })} options={[['chat', 'Chat only'], ['analysis', 'Chat + analysis'], ['everything', 'Everything']]} /></Row>}
+        <Row><span>Analysis model <span className="text-xs text-zinc-500">(reads public articles for the graph and trends)</span></span>
+          <select className="max-w-[16rem] rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm" aria-label="Analysis model" value={s.analysis_model || ''} onChange={e => save({ analysis_model: e.target.value })}>
+            {!(list || []).some(m => m.model === s.analysis_model) && <option value={s.analysis_model || ''}>{(s.analysis_model || 'None (use the local model)').replace('openrouter/', '')}</option>}
+            {(list || []).map(m => <option key={m.id} value={m.model}>{m.name} ({m.id.split('/')[0]})</option>)}<option value="">None (use the local model)</option></select></Row>
+        <div className="text-xs text-zinc-500">Pinned to one fast model, three articles at a time. If it is busy, {(s.analysis_fallbacks || []).map((f: string) => f.replace('openrouter/', '')).join(', ') || 'the fallback'} is tried next, and the batch waits politely when every model is rate-limited. Browse the list above to change it.</div>
         {current && <div className="text-xs text-zinc-500">“Chat + analysis” also uses it to read public articles for the knowledge graph and trend analysis. “Chat only” keeps all of that on the local model. Private content never leaves this computer in any mode.</div>}
       </div>
     </details>

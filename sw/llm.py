@@ -1,5 +1,5 @@
 """LLM + embedding access (Ollama by default, any litellm model via the `model` setting)."""
-import json, math, re, struct
+import json, math, re, struct, time
 import httpx
 from . import db
 
@@ -34,21 +34,48 @@ def _kwargs(model):
 
 ANALYSIS_FEATURES = {"graph", "developments", "implications", "analysis"}     # reading articles for what they mean, as opposed to summaries and the daily digest
 
+def _local(): return db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
+
+def analysis_models():
+    """The models used to read public articles for what they mean: a fast, pinned one first, then its fallbacks."""
+    first = db.get_setting("analysis_model") or ""
+    return [m for m in ([first] + list(db.get_setting("analysis_fallbacks") or [])) if m]
+
 def pick_model(private=False, feature="chat"):
     """Background work falls back to the local model once the cloud budget is spent; private never leaves.
-    An OpenRouter model answers chat, and (by default) the analysis of public articles; "chat only" keeps everything else local, and "everything" sends it all.
-    Free models are rate-limited and may keep what they are sent, which is why private content never goes."""
-    model = db.get_setting("model"); local = db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
+    Chat uses the chosen model. Reading public articles for analysis uses the separate analysis model when the cloud scope allows it (and a key is set);
+    "chat only" keeps analysis local, and "everything" also sends summaries and digests. Free models are rate-limited and may keep what they are sent,
+    which is why private content never goes."""
+    model = db.get_setting("model"); scope = db.get_setting("cloud_scope") or "analysis"
+    if feature in ANALYSIS_FEATURES and not private and scope in ("analysis", "everything") and db.get_setting("api_key") and analysis_models() and budget_left() > 0:
+        return analysis_models()[0]
     if model.startswith("openrouter/") and feature != "chat":
-        scope = db.get_setting("cloud_scope") or "analysis"
-        if not (scope == "everything" or (scope == "analysis" and feature in ANALYSIS_FEATURES)): return local
-    if not _is_local(model) and (private or budget_left() <= 0): return local
+        if not (scope == "everything" or (scope == "analysis" and feature in ANALYSIS_FEATURES)): return _local()
+    if not _is_local(model) and (private or budget_left() <= 0): return _local()
     return model
+
+class Unavailable(Exception):
+    """Every analysis model in the chain is busy or limited right now. Not the article's fault: try again later without counting a failure."""
+
+RETRYABLE = re.compile(r"rate.?limit|429|timeout|timed out|overloaded|503|502|500|unavailable|APIError|bad.?gateway|no endpoints|not ?found|404", re.I)
 
 def chat(messages, feature="chat", private=False, tools=None, tool_choice=None, model=None, temperature=0.3, timeout=300):
     from litellm import completion
     model = model or pick_model(private, feature)
+    chain = analysis_models() if (feature in ANALYSIS_FEATURES and model in analysis_models()) else [model]
+    last = None
+    for i, m in enumerate(chain):                      # the analysis model, then its fallbacks; anything else has just itself
+        try: return _chat_once(completion, messages, feature, m, tools, tool_choice, temperature, timeout)
+        except Exception as e:
+            last = e
+            if i == len(chain) - 1 or not RETRYABLE.search(f"{type(e).__name__} {e}"): break
+            time.sleep(min(4, 1 + i))                   # a short breath before the next one, so a burst of limits doesn't hammer them all
+    if feature in ANALYSIS_FEATURES and RETRYABLE.search(f"{type(last).__name__} {last}"): raise Unavailable(f"The analysis model is busy or rate-limited ({type(last).__name__}).") from last
+    raise last
+
+def _chat_once(completion, messages, feature, model, tools, tool_choice, temperature, timeout):
     kw = _kwargs(model)
+    if feature in ANALYSIS_FEATURES: kw["max_tokens"] = 3000     # models that think first need room to finish their answer
     if tools: kw["tools"] = tools; kw["tool_choice"] = tool_choice or "auto"
     try: resp = completion(messages=messages, temperature=temperature, timeout=timeout, **kw)
     except Exception as e:

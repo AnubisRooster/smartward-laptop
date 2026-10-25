@@ -125,7 +125,9 @@ def run(only_new=True):
             STATE.update(step="Summarizing", done=n, total=len(top)); summarize(aid)
         STATE["step"] = "Extracting themes"
         from . import graph
-        graph.extract_pending(STATE)
+        for _ in range(8):                                   # keep going in batches while there is a backlog, unless the models say they are busy
+            r = graph.extract_pending(STATE, limit=60)
+            if r["paused"] or r["done"] == 0: break
         STATE["last_run"] = time.time()
     finally:
         STATE.update(running=False, step="")

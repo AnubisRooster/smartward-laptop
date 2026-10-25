@@ -20,7 +20,8 @@ def resolve(name, typ="other"):
     typ = typ if typ in TYPES else "other"
     return db.x("INSERT INTO themes(name,key,type,created) VALUES(?,?,?,?)", (name.strip()[:80], key, typ, db.now()))
 
-def extract_article(a):
+def _ask_model(a):
+    """The slow part (a model call), safe to run in several threads at once: it only reads."""
     text = (a["text"] or a["teaser"] or "")[:5000]
     prompt = ("Extract the key entities and relations from this article about AI and software development. Reply with JSON only: "
               '{"entities":[{"name":"...","type":"model|tool|library|company|person|concept|technique|benchmark|paper|project"}],'
@@ -30,6 +31,10 @@ def extract_article(a):
     raw = llm.text([{"role": "user", "content": prompt}], feature="graph", private=bool(a["private"]))
     data = llm.json_from(raw)
     if not isinstance(data, dict) or not isinstance(data.get("entities"), list): raise ValueError("model gave no usable entities")
+    return data
+
+def _apply(a, data):
+    """Write what the model found (themes, mentions, edges) for one article."""
     ts = a["published"] or db.now(); ids = {}
     for e in data["entities"][:8]:
         if isinstance(e, dict) and e.get("name"):
@@ -44,14 +49,31 @@ def extract_article(a):
                 db.x("INSERT INTO edges(a,b,relation,article_id,ts) VALUES(?,?,?,?,?)", (ta, tb, str(r.get("relation", "related to"))[:60], a["id"], ts))
     return len(ids)
 
-def extract_pending(state=None, limit=40):
+def extract_article(a): return _apply(a, _ask_model(a))
+
+def extract_pending(state=None, limit=40, workers=None):
+    """Read articles for entities, several at a time (the model call is the slow part; the writes happen one at a time here).
+    When every analysis model is busy the batch stops without marking anything failed: it simply continues next time."""
+    from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
     rows = db.q("SELECT * FROM articles WHERE stage='done' AND graph_done=0 AND graph_fails<2 AND relevant=1 ORDER BY published DESC LIMIT ?", (limit,))
-    for i, a in enumerate(rows):
-        if state is not None: state.update(step="Extracting themes", done=i, total=len(rows))
-        try:
-            extract_article(a); db.x("UPDATE articles SET graph_done=1 WHERE id=?", (a["id"],))
-        except Exception as e:
-            db.x("UPDATE articles SET graph_fails=graph_fails+1, stage_error=? WHERE id=?", (f"Graph: {e}"[:200], a["id"]))
+    workers = max(1, min(6, int(workers or db.get_setting("analysis_workers") or 1)))
+    done = 0; paused = False
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_ask_model, a): a for a in rows}
+        for f in as_completed(futures):
+            a = futures[f]
+            try:
+                _apply(a, f.result()); db.x("UPDATE articles SET graph_done=1 WHERE id=?", (a["id"],))
+            except CancelledError:
+                continue                                       # never started because the batch paused: nothing to record
+            except llm.Unavailable:
+                paused = True
+                for other in futures: other.cancel()          # not started yet: leave them for next time
+            except Exception as e:
+                db.x("UPDATE articles SET graph_fails=graph_fails+1, stage_error=? WHERE id=?", (f"Graph: {e}"[:200], a["id"]))
+            done += 1
+            if state is not None: state.update(step="Extracting themes" + (" (waiting: model busy)" if paused else ""), done=done, total=len(rows))
+    return {"done": done, "paused": paused}
 
 def strengths(scope="all", scope_id=None, include_dormant=False):
     """Theme strength = sum of mention weights with exponential decay; scoped by time/project/source."""
