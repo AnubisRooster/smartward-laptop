@@ -24,3 +24,9 @@ export function ago(ts?: number | null) {
   if (s < 86400 * 14) return `${Math.floor(s / 86400)}d ago`;
   return new Date(ts * 1000).toLocaleDateString();
 }
+
+// A phone that isn't signed in gets 401 {remote_auth: true}: the app shows its sign-in screen.
+http.interceptors.response.use(r => r, e => {
+  if (e?.response?.status === 401 && e.response.data?.remote_auth) window.dispatchEvent(new Event('sw-remote-auth'));
+  return Promise.reject(e);
+});

@@ -1,15 +1,26 @@
 """SmartWard local API (FastAPI). Run: python3 smartward_api.py  ->  http://localhost:8000/"""
 import base64, gzip, hashlib, json, os, secrets, threading, time
 import httpx, uvicorn
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.middleware("http")
+async def front_door(request: Request, call_next):
+    """Phones come through Tailscale Serve; they sign in and may only use what sw/remote.py allows. Local use is unchanged."""
+    refusal = remote.decide(request.method, request.url.path, request.headers, request.cookies.get(remote.COOKIE))
+    if refusal:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": refusal[1], "remote_auth": refusal[0] == 401}, status_code=refusal[0], headers={"Cache-Control": "no-store"})
+    resp = await call_next(request)
+    if remote.is_remote(request.headers) and request.url.path.startswith("/api/"): resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 def bad(msg, code=400): raise HTTPException(code, msg)
 def bg(fn, *a): threading.Thread(target=fn, args=a, daemon=True).start()
@@ -46,7 +57,7 @@ class SettingsIn(BaseModel):
 @app.put("/api/settings")
 def put_settings(s: SettingsIn):
     for k, v in s.values.items():
-        if k in ("lock_hash",): continue
+        if k in ("lock_hash",) or k.startswith("remote_"): continue
         if k.startswith("tts_") or k == "voice_rate":
             try: tts.validate_setting(k, v, s.values)
             except ValueError as e: bad(str(e))
@@ -207,6 +218,50 @@ def voice_pause(): return {"ok": stt.send("pause")}
 def voice_resume(): return {"ok": stt.send("resume")}
 @app.get("/api/voice/poll")
 def voice_poll(after: int = 0): return stt.poll(after)
+
+# ---------- remote (phone) access ----------
+@app.post("/api/remote/login")
+def remote_login(body: dict, request: Request, response: Response):
+    wait = remote.locked_for()
+    if wait > 0: bad(f"Too many wrong tries. Wait {int(wait // 60) + 1} minutes.", 429)
+    time.sleep(0.5)
+    stored = db.get_setting("remote_hash")
+    if not stored or not remote.check_pass(str(body.get("passphrase", "")), stored):
+        remote.record_failure(); remote.log("wrong passphrase", request.headers.get("tailscale-user-login", "")); bad("Wrong passphrase.", 403)
+    remote.clear_failures(); token = remote.new_session(request.headers.get("user-agent", "")); remote.log("signed in", request.headers.get("user-agent", "")[:80])
+    response.set_cookie(remote.COOKIE, token, max_age=remote.SESSION_SECONDS, httponly=True, secure=True, samesite="strict", path="/")
+    return {"ok": True}
+
+@app.get("/api/remote/session")
+def remote_session(request: Request):
+    return {"enabled": remote.enabled(), "signed_in": bool(remote.valid_session(request.cookies.get(remote.COOKIE)))}
+
+@app.post("/api/remote/logout")
+def remote_logout(request: Request, response: Response):
+    sid = remote.valid_session(request.cookies.get(remote.COOKIE))
+    if sid: remote.revoke(sid)
+    response.delete_cookie(remote.COOKIE, path="/"); return {"ok": True}
+
+# Managing remote access is only possible from this computer: none of these are on the phone's allow-list.
+@app.get("/api/remote/status")
+def remote_status():
+    return {"enabled": remote.enabled(), "login": db.get_setting("remote_login") or "", "host": db.get_setting("remote_host") or "",
+            "has_passphrase": bool(db.get_setting("remote_hash")), "sessions": remote.list_sessions(), "log": (db.get_setting("remote_log") or [])[-20:]}
+
+@app.put("/api/remote/config")
+def remote_config(body: dict):
+    if body.get("passphrase"):
+        if len(str(body["passphrase"])) < 8: bad("Use at least 8 characters for the remote passphrase.")
+        db.set_setting("remote_hash", remote.hash_pass(str(body["passphrase"])))
+    if "login" in body: db.set_setting("remote_login", str(body["login"]).strip().lower())
+    if "host" in body: db.set_setting("remote_host", str(body["host"]).strip().lower())
+    if "enabled" in body:
+        if body["enabled"] and not (db.get_setting("remote_hash") and db.get_setting("remote_login")): bad("Set a passphrase and your Tailscale login before turning remote access on.")
+        db.set_setting("remote_enabled", bool(body["enabled"])); remote.log("turned on" if body["enabled"] else "turned off")
+    return remote_status()
+
+@app.post("/api/remote/revoke")
+def remote_revoke(body: dict): remote.revoke(str(body.get("id", "all"))); return remote_status()
 
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)

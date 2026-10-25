@@ -6,6 +6,7 @@ import { FeedbackHost } from './feedback';
 import Shortcuts from './Shortcuts';
 import Palette from './Palette';
 import Links from './Links';
+import RemoteSignIn from './RemoteSignIn';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
@@ -45,6 +46,8 @@ export default function App() {
   const { data: st, error, reload } = useLoad<any>('/status', undefined, 4000);
   const [locked, setLocked] = useState(() => { try { return sessionStorage.getItem('sw.unlocked') !== '1'; } catch { return true; } });
   const [rail, setRail] = useState(() => { try { return localStorage.getItem('sw.rail') === '1'; } catch { return false; } });
+  const [needSignIn, setNeedSignIn] = useState(false);
+  useEffect(() => { const f = () => setNeedSignIn(true); window.addEventListener('sw-remote-auth', f); return () => window.removeEventListener('sw-remote-auth', f); }, []);
   const idle = useRef<any>(null);
   const firstBuild = useRef<number | null>(null);
   useEffect(() => { if (st?.ui_build == null) return; if (firstBuild.current == null) firstBuild.current = st.ui_build; }, [st?.ui_build]);
@@ -78,6 +81,7 @@ export default function App() {
     return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pointerdown', reset); window.removeEventListener('keydown', reset); clearTimeout(idle.current); };
   }, [lockOn]);
 
+  if (needSignIn) return <RemoteSignIn onDone={() => { setNeedSignIn(false); reload(); }} />;
   if (!st) {
     return <><div className="flex h-full items-center justify-center p-8 text-center" role={error ? 'alert' : 'status'}>
       <div><div className="mb-2 text-lg">{error ? 'SmartWard’s backend isn’t running' : 'Starting…'}</div>
