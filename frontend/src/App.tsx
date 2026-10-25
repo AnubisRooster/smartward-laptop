@@ -6,6 +6,7 @@ import { FeedbackHost } from './feedback';
 import Shortcuts from './Shortcuts';
 import Palette from './Palette';
 import Links from './Links';
+import { onPhone } from './device';
 import RemoteSignIn, { PhoneAccount } from './RemoteSignIn';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
@@ -17,7 +18,6 @@ const Settings = lazy(() => import('./views/Settings'));
 import Onboarding from './views/Onboarding';
 import { onDesktopEvent } from './desktop';
 
-const onPhone = typeof location !== 'undefined' && location.protocol === 'https:' && !/^(localhost|127\.)/.test(location.hostname);   // reached over the private network, not the laptop's own window
 const TABS: [Tab, string, typeof Sun][] = [['today', 'Today', Sun], ['reading', 'Reading', Newspaper], ['graph', 'Graph', Share2], ['chat', 'Chat', MessageSquare], ['projects', 'Projects', FolderKanban]];
 
 function LockScreen({ onUnlock }: { onUnlock: () => void }) {

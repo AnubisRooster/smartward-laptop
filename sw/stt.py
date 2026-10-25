@@ -101,5 +101,63 @@ def poll(after=0):
 def reset():
     """Tests: forget everything."""
     global _seq
-    stop()
+    stop(); stop_worker()
     with _lock: _events.clear(); _seq = 0; _state.update(ready=False, state="off", error="")
+
+
+# ---- transcribing a recording sent from a phone ----
+WORKER_IDLE_S = 600         # the speech model leaves memory after ten idle minutes
+MAX_AUDIO_BYTES = 6_000_000
+_w = {"proc": None, "used": 0.0, "id": 0}
+_wlock = threading.Lock()       # one recording at a time: the model is the bottleneck anyway
+
+
+def worker_command():
+    if os.environ.get("SMARTWARD_STT_WORKER_CMD"): return os.environ["SMARTWARD_STT_WORKER_CMD"].split()
+    return [str(DIR / ".venv/bin/python"), str(DIR / "worker.py"), str(DIR / "models" / model_name())]
+
+
+def _worker():
+    p = _w["proc"]
+    if p is not None and p.poll() is None: return p
+    p = subprocess.Popen(worker_command(), cwd=str(DIR), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+    first = json.loads(p.stdout.readline() or "{}")
+    if not first.get("ready"):
+        p.kill(); raise RuntimeError(first.get("error") or "The speech model didn't start.")
+    _w["proc"] = p
+    threading.Thread(target=_worker_idle, args=(p,), daemon=True).start()
+    return p
+
+
+def _worker_idle(p):
+    while p.poll() is None:
+        time.sleep(5)
+        if time.time() - _w["used"] > WORKER_IDLE_S: stop_worker(p); return
+
+
+def stop_worker(p=None):
+    with _wlock if p is None else threading.Lock():
+        p = p or _w["proc"]
+        if p is None: return
+        try: p.stdin.close()
+        except Exception: pass
+        try: p.wait(timeout=3)
+        except subprocess.TimeoutExpired: p.kill()
+        if _w["proc"] is p: _w["proc"] = None
+
+
+def transcribe(path, timeout=180):
+    """The text in an audio file (wav, webm, mp4, ogg...). Raises RuntimeError when speech input isn't available."""
+    if not installed(): raise RuntimeError("Speech input isn't installed on the laptop. Run stt/setup.sh.")
+    with _wlock:
+        p = _worker(); _w["used"] = time.time(); _w["id"] += 1; rid = _w["id"]
+        p.stdin.write(json.dumps({"id": rid, "path": str(path)}) + "\n"); p.stdin.flush()
+        box = []
+        t = threading.Thread(target=lambda: box.append(p.stdout.readline()), daemon=True); t.start(); t.join(timeout)
+        if not box or not box[0]:
+            try: p.kill()
+            except Exception: pass
+            _w["proc"] = None; raise RuntimeError("The speech model took too long. Try again.")
+        res = json.loads(box[0]); _w["used"] = time.time()
+        if res.get("error"): raise RuntimeError(res["error"])
+        return res.get("text", "")

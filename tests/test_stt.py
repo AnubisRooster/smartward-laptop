@@ -93,3 +93,42 @@ class EndpointerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_WORKER = os.path.join(os.path.dirname(__file__), "fixtures", "fake_worker.py")
+
+
+class TranscribeTests(unittest.TestCase):
+    def setUp(self): os.environ["SMARTWARD_STT_CMD"] = "x"; os.environ["SMARTWARD_STT_WORKER_CMD"] = f"{sys.executable} {FAKE_WORKER}"; stt.reset()
+    def tearDown(self): stt.reset(); os.environ.pop("SMARTWARD_STT_CMD", None); os.environ.pop("SMARTWARD_STT_WORKER_CMD", None)
+
+    def post(self, data, kind="audio/wav"): return c.post("/api/voice/transcribe", content=data, headers={"Content-Type": kind})
+
+    def test_a_recording_becomes_text(self):
+        r = self.post(b"RIFF" + b"0" * 100); self.assertEqual(r.status_code, 200); self.assertEqual(r.json()["text"], "heard 104 bytes as .wav")
+
+    def test_phone_formats_are_accepted_and_keep_their_extension(self):
+        self.assertTrue(self.post(b"x" * 10, "audio/webm;codecs=opus").json()["text"].endswith(".webm"))
+        self.assertTrue(self.post(b"x" * 10, "audio/mp4").json()["text"].endswith(".mp4"))
+
+    def test_the_worker_is_reused_between_recordings(self):
+        self.post(b"a" * 5); first = stt._w["proc"]; self.post(b"a" * 6); self.assertIs(stt._w["proc"], first)
+
+    def test_bad_requests_are_refused_plainly(self):
+        self.assertEqual(self.post(b"").status_code, 400); self.assertEqual(self.post(b"x", "text/plain").status_code, 415)
+        self.assertEqual(self.post(b"x" * (stt.MAX_AUDIO_BYTES + 1)).status_code, 413)
+
+    def test_nothing_is_left_on_disk(self):
+        import glob, tempfile
+        before = set(glob.glob(os.path.join(tempfile.gettempdir(), "tmp*.wav"))); self.post(b"x" * 9)
+        self.assertEqual(set(glob.glob(os.path.join(tempfile.gettempdir(), "tmp*.wav"))), before)
+
+    def test_a_phone_with_a_session_may_use_it_and_the_laptop_microphone_stays_blocked(self):
+        from tests.test_remote import VIA, turn_on, sign_in
+        turn_on(); sign_in()
+        self.assertEqual(c.post("/api/voice/transcribe", content=b"x" * 8, headers={**VIA, "Content-Type": "audio/wav"}).status_code, 200)
+        self.assertEqual(c.post("/api/voice/start", headers=VIA).status_code, 403)
+
+    def test_an_unavailable_model_is_a_503_with_the_fix(self):
+        os.environ.pop("SMARTWARD_STT_CMD"); stt.reset()
+        if not stt.installed(): r = self.post(b"x"); self.assertEqual(r.status_code, 503); self.assertIn("setup.sh", r.json()["detail"])

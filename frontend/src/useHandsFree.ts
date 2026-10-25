@@ -4,6 +4,10 @@ import { speech, useSpeech } from './hooks';
 import { toast } from './feedback';
 import { parseVoice, plainForSpeech } from './voiceInput';
 import { takeAudioChat } from './voiceIntent';
+import { BrowserMic } from './browserMic';
+import { onPhone } from './device';
+import { encodeWav } from './wav';
+import { http } from './api';
 
 export type HandsFreeStatus = 'off' | 'loading' | 'listening' | 'hearing' | 'thinking' | 'speaking';
 
@@ -24,6 +28,7 @@ interface Args {
 export function useHandsFree(a: Args) {
   const [on, setOn] = useState(false); const [server, setServer] = useState<string>('off'); const [error, setError] = useState('');
   const sp = useSpeech();
+  const mic = useRef<BrowserMic | null>(null); const queue = useRef<Promise<void>>(Promise.resolve()); const transcribing = useRef(0); const [busy, setBusy] = useState(false);
   const cursor = useRef(0); const voiceTurn = useRef(false); const wasRunning = useRef(false); const announced = useRef(new Set<string>()); const latest = useRef(a); latest.current = a;
   const wasSpeaking = useRef(false);
 
@@ -33,8 +38,23 @@ export function useHandsFree(a: Args) {
 
   // The microphone follows `on`.
   useEffect(() => {
-    if (!on) { post('/voice/stop').catch(() => {}); setServer('off'); return; }
+    if (!on) { if (!onPhone) post('/voice/stop').catch(() => {}); setServer('off'); return; }
     let alive = true; setError(''); setServer('loading');
+    if (onPhone) {            // the phone's own microphone; each sentence is sent to the laptop and turned into text there
+      const m = new BrowserMic(); mic.current = m;
+      const send = (audio: Float32Array) => {
+        transcribing.current++; setBusy(true);
+        queue.current = queue.current.then(async () => {
+          try { const r = await http.post('/voice/transcribe', encodeWav(audio), { headers: { 'Content-Type': 'audio/wav' }, timeout: 120000 }); if (alive && r.data.text) handle(r.data.text); }
+          catch (e) { if (alive) setError(errText(e)); }
+          finally { transcribing.current--; if (alive && transcribing.current === 0) setBusy(false); }
+        });
+      };
+      m.start(s => alive && setServer(s), send).catch(e => { if (alive) { setError(e?.name === 'NotAllowedError' ? 'The microphone is blocked. Allow it for this site in the phone’s settings, then try again.' : errText(e)); setOn(false); } });
+      const hidePhone = () => { if (document.hidden) turnOff(); };
+      document.addEventListener('visibilitychange', hidePhone); window.addEventListener('sw-lock', turnOff);
+      return () => { alive = false; m.stop(); mic.current = null; document.removeEventListener('visibilitychange', hidePhone); window.removeEventListener('sw-lock', turnOff); };
+    }
     (async () => {
       try { await post('/voice/start'); const first = await get('/voice/poll', { after: 0 }); cursor.current = first.seq; }
       catch (e) { if (alive) { setError(errText(e)); setOn(false); } return; }
@@ -66,8 +86,8 @@ export function useHandsFree(a: Args) {
   // Never listen to our own voice: pause while reading, resume a moment after.
   useEffect(() => {
     if (!on) { wasSpeaking.current = false; return; }
-    if (sp.on && !wasSpeaking.current) post('/voice/pause').catch(() => {});
-    if (!sp.on && wasSpeaking.current) post('/voice/resume').catch(() => {});
+    if (sp.on && !wasSpeaking.current) { if (onPhone) mic.current?.pause(); else post('/voice/pause').catch(() => {}); }
+    if (!sp.on && wasSpeaking.current) { if (onPhone) mic.current?.resume(); else post('/voice/resume').catch(() => {}); }
     wasSpeaking.current = sp.on;
   }, [sp.on, on]);
 
@@ -88,6 +108,6 @@ export function useHandsFree(a: Args) {
     if (next) { announced.current.add(next.id); speech.speak([`Approval needed. ${next.title}. ${String(next.detail).slice(0, 200)}. Say approve or decline.`]); }
   }, [a.pending.length, on]);
 
-  const status: HandsFreeStatus = !on ? 'off' : sp.on ? 'speaking' : a.running ? 'thinking' : server === 'loading' ? 'loading' : server === 'hearing' ? 'hearing' : 'listening';
-  return { on, status, error, toggle: () => (on ? turnOff() : (setError(''), setOn(true))), turnOff };
+  const status: HandsFreeStatus = !on ? 'off' : sp.on ? 'speaking' : a.running || busy ? 'thinking' : server === 'loading' ? 'loading' : server === 'hearing' ? 'hearing' : 'listening';
+  return { on, status, error, toggle: () => { if (on) turnOff(); else { speech.unlock(); setError(''); setOn(true); } }, turnOff };
 }

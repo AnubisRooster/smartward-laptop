@@ -116,3 +116,33 @@ describe('Today brief', () => {
     const p = briefParts(Array.from({ length: 10 }, (_, i) => c('T' + i, ['x']))); expect(p.length).toBe(1 + 6 * 2 + 1); expect(p[p.length - 1]).toBe('And 4 more themes on the page.');
   });
 });
+
+import { Endpointer, FRAME } from '../vad';
+import { encodeWav, toRate16k } from '../wav';
+const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const frames = (secs: number, level: number) => Array.from({ length: Math.round(secs * 50) }, () => Float32Array.from({ length: FRAME }, () => gauss() * level / 32768));
+const run = (ep: Endpointer, fr: Float32Array[]) => fr.map(f => ep.feed(f)).filter(Boolean) as any[];
+describe('phone voice: sentence detection (same behaviour as the laptop listener)', () => {
+  it('a sentence between silences is one utterance with its trailing silence', () => {
+    const ev = run(new Endpointer(), [...frames(2, 8), ...frames(1.5, 3000), ...frames(2, 8)]);
+    expect(ev.map(e => e.type)).toEqual(['start', 'end']); const secs = ev[1].audio.length / 16000; expect(secs).toBeGreaterThan(1.5); expect(secs).toBeLessThan(2.8);
+  });
+  it('silence and steady room noise never start', () => { expect(run(new Endpointer(), frames(10, 8))).toEqual([]); expect(run(new Endpointer(), frames(10, 40))).toEqual([]); });
+  it('a click is dropped', () => { const ev = run(new Endpointer(), [...frames(2, 8), ...frames(0.1, 3000), ...frames(2, 8)]); expect(ev.filter(e => e.type === 'end').every(e => e.audio === null)).toBe(true); });
+  it('a short pause inside a sentence does not split it', () => { expect(run(new Endpointer(), [...frames(2, 8), ...frames(1, 3000), ...frames(0.4, 8), ...frames(1, 3000), ...frames(2, 8)]).map(e => e.type)).toEqual(['start', 'end']); });
+  it('two sentences are two utterances', () => { expect(run(new Endpointer(), [...frames(2, 8), ...frames(1, 3000), ...frames(1.5, 8), ...frames(1, 3000), ...frames(1.5, 8)]).map(e => e.type)).toEqual(['start', 'end', 'start', 'end']); });
+  it('adapts to a noisy room', () => { expect(run(new Endpointer(), [...frames(3, 150), ...frames(1.5, 4000), ...frames(2, 150)]).map(e => e.type)).toEqual(['start', 'end']); });
+});
+describe('phone voice: audio encoding', () => {
+  it('writes a valid 16 kHz mono WAV', async () => {
+    const blob = encodeWav(Float32Array.from([0, 0.5, -0.5, 1, -1, 2]), 16000); const b = new DataView(await blob.arrayBuffer());
+    expect(blob.type).toBe('audio/wav'); expect(blob.size).toBe(44 + 12);
+    expect(String.fromCharCode(b.getUint8(0), b.getUint8(1), b.getUint8(2), b.getUint8(3))).toBe('RIFF'); expect(b.getUint32(24, true)).toBe(16000); expect(b.getUint16(22, true)).toBe(1);
+    expect(b.getInt16(46, true)).toBeGreaterThan(16000); expect(b.getInt16(50, true)).toBe(32767); expect(b.getInt16(52, true)).toBe(-32768); expect(b.getInt16(54, true)).toBe(32767);   // 1, -1 and an out-of-range 2: clipped, not wrapped
+  });
+  it('down-samples 48 kHz to 16 kHz without losing track of the remainder', () => {
+    const carry = { pos: 0 }; const a = toRate16k(new Float32Array(4096).fill(0.25), 48000, carry); const b = toRate16k(new Float32Array(4096).fill(0.25), 48000, carry);
+    expect(a.length + b.length).toBeGreaterThanOrEqual(2730); expect(a.length + b.length).toBeLessThanOrEqual(2731); expect(a.every(x => Math.abs(x - 0.25) < 1e-6)).toBe(true);
+    expect(toRate16k(new Float32Array(10), 16000).length).toBe(10);
+  });
+});

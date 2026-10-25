@@ -90,7 +90,7 @@ export const speech = {
   queue: [] as string[], idx: 0, on: false, owner: '', paused: false, rate: 1, engine: '' as '' | 'kokoro' | 'browser', notice: '',
   listeners: new Set<() => void>(),
   token: 0, flat: [] as { part: number; text: string }[], cursor: 0,
-  audio: null as HTMLAudioElement | null, clips: new Map<number, Promise<string>>(), aborts: new Set<AbortController>(), cfg: null as SpeechConfig | null,
+  audio: null as HTMLAudioElement | null, el: null as HTMLAudioElement | null, clips: new Map<number, Promise<string>>(), aborts: new Set<AbortController>(), cfg: null as SpeechConfig | null,
   notify() { speech.listeners.forEach(f => f()); },
 
   /** Settings + whether the natural voice is up decide which voice speaks. */
@@ -124,6 +124,13 @@ export const speech = {
     speech.notify();
   },
 
+  /** One audio element for the whole session. Phones only let an element play after a tap has "unlocked" it, so a new element per clip would be blocked. */
+  element(): HTMLAudioElement { if (!speech.el) speech.el = new Audio(); return speech.el; },
+  /** Call from a tap or click (the Audio chat switch): lets later spoken answers play on a phone. */
+  unlock() {
+    try { const a = speech.element(); a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='; void a.play().catch(() => {}); } catch { /* not supported: reading just won't start by itself */ }
+  },
+
   clip(i: number): Promise<string> {
     const cached = speech.clips.get(i); if (cached) return cached;
     const c = speech.cfg!; const ctl = new AbortController(); speech.aborts.add(ctl);
@@ -150,7 +157,7 @@ export const speech = {
       }
       if (!alive()) return;
       await new Promise<void>(resolve => {
-        const audio = new Audio(url); speech.audio = audio;
+        const audio = speech.element(); audio.src = url; speech.audio = audio;
         audio.onended = () => resolve(); audio.onerror = () => resolve();
         void audio.play().catch(() => resolve());
       });

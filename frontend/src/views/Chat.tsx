@@ -16,7 +16,7 @@ export default function Chat() {
   return (
     <div className="flex h-full">
       <section className={cx('flex min-h-0 w-full flex-col border-zinc-800 md:w-80 md:shrink-0 md:border-r', convId != null && 'hidden md:flex')}>
-        <div className="flex items-center justify-between border-b border-zinc-800 p-3"><h1 className="text-lg font-semibold">Chat</h1><div className="flex gap-1.5"><Btn small title="Start a new chat and just talk: it listens and reads the answers aloud" onClick={async () => { try { const r = await post('/conversations', { mode: 'brainstorm' }); wantAudioChat(); reload(); go('chat', { convId: r.id }); } catch (e) { toast.error(errText(e)); } }}><Mic size={13} aria-hidden /> Talk</Btn><Btn small kind="primary" onClick={() => setCreating(true)}>+ New</Btn></div></div>
+        <div className="flex items-center justify-between border-b border-zinc-800 p-3"><h1 className="text-lg font-semibold">Chat</h1><div className="flex gap-1.5"><Btn small title="Start a new chat and just talk: it listens and reads the answers aloud" onClick={async () => { try { const r = await post('/conversations', { mode: 'brainstorm' }); speech.unlock(); wantAudioChat(); reload(); go('chat', { convId: r.id }); } catch (e) { toast.error(errText(e)); } }}><Mic size={13} aria-hidden /> Talk</Btn><Btn small kind="primary" onClick={() => setCreating(true)}>+ New</Btn></div></div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {(list || []).length === 0 && <Empty icon="✎" title="No conversations yet">Brainstorm, critique an idea, plan research, or review your week with the strategist.</Empty>}
           {(list || []).map(c => (

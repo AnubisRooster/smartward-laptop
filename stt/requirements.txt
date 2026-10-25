@@ -1,2 +1,3 @@
 faster-whisper
 numpy
+av<17   # newer PyAV versions no longer accept an option faster-whisper passes when opening audio files

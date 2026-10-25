@@ -216,6 +216,24 @@ def voice_stop(): stt.stop(); return stt.status()
 def voice_pause(): return {"ok": stt.send("pause")}
 @app.post("/api/voice/resume")
 def voice_resume(): return {"ok": stt.send("resume")}
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(request: Request):
+    """A phone's recording (the body is the audio file) -> text, using the speech model on this laptop. Nothing is stored."""
+    import tempfile
+    from starlette.concurrency import run_in_threadpool
+    body = await request.body()
+    if not body: bad("No audio received.")
+    if len(body) > stt.MAX_AUDIO_BYTES: bad("That recording is too long. Say a shorter sentence.", 413)
+    kind = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    ext = {"audio/wav": ".wav", "audio/x-wav": ".wav", "audio/webm": ".webm", "audio/mp4": ".mp4", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/aac": ".aac"}.get(kind)
+    if not ext: bad("Unsupported audio type.", 415)
+    def work():
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=True) as f:
+            f.write(body); f.flush()
+            return stt.transcribe(f.name)
+    try: return {"text": await run_in_threadpool(work)}
+    except RuntimeError as e: bad(str(e), 503)
+
 @app.get("/api/voice/poll")
 def voice_poll(after: int = 0): return stt.poll(after)
 
