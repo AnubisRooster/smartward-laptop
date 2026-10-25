@@ -46,6 +46,9 @@ export default function App() {
   const [locked, setLocked] = useState(() => { try { return sessionStorage.getItem('sw.unlocked') !== '1'; } catch { return true; } });
   const [rail, setRail] = useState(() => { try { return localStorage.getItem('sw.rail') === '1'; } catch { return false; } });
   const idle = useRef<any>(null);
+  const firstBuild = useRef<number | null>(null);
+  useEffect(() => { if (st?.ui_build == null) return; if (firstBuild.current == null) firstBuild.current = st.ui_build; }, [st?.ui_build]);
+  const stale = st?.ui_build != null && firstBuild.current != null && st.ui_build !== firstBuild.current;
   const lockOn = !!st?.lock_enabled;
   const lockNow = () => { speech.stop(); setLocked(true); try { sessionStorage.removeItem('sw.unlocked'); } catch {} };
   useEffect(() => { const f = () => lockNow(); window.addEventListener('sw-lock', f); return () => window.removeEventListener('sw-lock', f); }, []);
@@ -107,6 +110,7 @@ export default function App() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {p.running && tab !== 'reading' && (
           <div className="border-b border-zinc-800 bg-zinc-900/60 px-4 py-2"><Progress value={pct} label={`${p.step || 'Working'}… ${p.total ? `${p.done} of ${p.total}` : ''}`} /></div>)}
+        {stale && <div role="status" className="flex items-center justify-between gap-3 border-b border-indigo-800 bg-indigo-950/40 px-4 py-2 text-sm">SmartWard was updated. <button className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500" onClick={() => location.reload()}>Reload to use the new version</button></div>}
         <div className="min-h-0 flex-1 overflow-hidden"><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></div>
       </main>
       <Shortcuts />

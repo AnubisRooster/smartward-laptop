@@ -20,7 +20,12 @@ def status():
     pre = preflight()
     unread = db.q("SELECT COUNT(*) n FROM articles WHERE read=0 AND relevant=1 AND source_id IN (SELECT id FROM sources)", one=True)["n"]
     return {"model": db.get_setting("model"), "articles": pipeline.counts()["all_articles"], "unread": unread, "pipeline": {**pipeline.STATE, **pipeline.counts()}, "preflight": pre,
-            "onboarding_completed": bool(db.get_setting("onboarding_completed")), "lock_enabled": bool(db.get_setting("lock_enabled"))}
+            "onboarding_completed": bool(db.get_setting("onboarding_completed")), "lock_enabled": bool(db.get_setting("lock_enabled")), "ui_build": ui_build()}
+
+def ui_build():
+    """Changes whenever the interface is rebuilt, so an open window can offer to reload."""
+    try: return int(os.path.getmtime(os.path.join(_UI, "index.html")))
+    except OSError: return 0
 
 def preflight():
     out = {"ollama": False, "chat_model": False, "embed_model": False, "models": []}

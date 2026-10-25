@@ -96,3 +96,8 @@ describe('answers read aloud', () => {
   });
   it('handles empty input', () => { expect(plainForSpeech('')).toEqual([]); });
 });
+
+import { wantAudioChat, takeAudioChat } from '../voiceIntent';
+describe('audio chat on open', () => {
+  it('is handed over once', () => { expect(takeAudioChat()).toBe(false); wantAudioChat(); expect(takeAudioChat()).toBe(true); expect(takeAudioChat()).toBe(false); });
+});

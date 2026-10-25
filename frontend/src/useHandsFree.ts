@@ -3,6 +3,7 @@ import { errText, get, post } from './api';
 import { speech, useSpeech } from './hooks';
 import { toast } from './feedback';
 import { parseVoice, plainForSpeech } from './voiceInput';
+import { takeAudioChat } from './voiceIntent';
 
 export type HandsFreeStatus = 'off' | 'loading' | 'listening' | 'hearing' | 'thinking' | 'speaking';
 
@@ -25,6 +26,8 @@ export function useHandsFree(a: Args) {
   const sp = useSpeech();
   const cursor = useRef(0); const voiceTurn = useRef(false); const wasRunning = useRef(false); const announced = useRef(new Set<string>()); const latest = useRef(a); latest.current = a;
   const wasSpeaking = useRef(false);
+
+  useEffect(() => { if (takeAudioChat()) setOn(true); }, []);
 
   const turnOff = useCallback(() => { setOn(false); speech.stop(); }, []);
 

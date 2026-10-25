@@ -6,6 +6,8 @@ import { speech, useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Modal, Field, inputCls, Spin, cx } from '../ui';
 import { ask, toast } from '../feedback';
 import { useHandsFree } from '../useHandsFree';
+import { wantAudioChat } from '../voiceIntent';
+import { Mic } from 'lucide-react';
 
 export default function Chat() {
   const { convId, go } = useNav();
@@ -14,7 +16,7 @@ export default function Chat() {
   return (
     <div className="flex h-full">
       <section className={cx('flex min-h-0 w-full flex-col border-zinc-800 md:w-80 md:shrink-0 md:border-r', convId != null && 'hidden md:flex')}>
-        <div className="flex items-center justify-between border-b border-zinc-800 p-3"><h1 className="text-lg font-semibold">Chat</h1><Btn small kind="primary" onClick={() => setCreating(true)}>+ New</Btn></div>
+        <div className="flex items-center justify-between border-b border-zinc-800 p-3"><h1 className="text-lg font-semibold">Chat</h1><div className="flex gap-1.5"><Btn small title="Start a new chat and just talk: it listens and reads the answers aloud" onClick={async () => { try { const r = await post('/conversations', { mode: 'brainstorm' }); wantAudioChat(); reload(); go('chat', { convId: r.id }); } catch (e) { toast.error(errText(e)); } }}><Mic size={13} aria-hidden /> Talk</Btn><Btn small kind="primary" onClick={() => setCreating(true)}>+ New</Btn></div></div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {(list || []).length === 0 && <Empty icon="✎" title="No conversations yet">Brainstorm, critique an idea, plan research, or review your week with the strategist.</Empty>}
           {(list || []).map(c => (
@@ -105,6 +107,10 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-zinc-800 p-3"><button className="text-sm text-zinc-400 md:hidden" aria-label="Back to conversations" onClick={onBack}>←</button>
         <div className="min-w-0 flex-1"><div className="truncate font-medium">{c.title}</div><div className="text-xs text-zinc-500">{c.mode}{c.off_record ? ' · off the record' : ''}</div></div>
+        <button type="button" role="switch" aria-checked={hf.on} onClick={hf.toggle} title={hf.on ? 'Audio chat is on: turn it off (or say “stop listening”)' : 'Audio chat: talk to the strategist and hear its answers'}
+          className={cx('inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium', hf.on ? 'border-red-500 bg-red-950/40 text-red-300' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800')}>
+          <span className={cx('relative h-4 w-7 rounded-full transition-colors', hf.on ? 'bg-red-500' : 'bg-zinc-600')} aria-hidden><span className={cx('absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all', hf.on ? 'left-3.5' : 'left-0.5')} /></span>
+          <Mic size={13} aria-hidden /> Audio chat</button>
         <Btn small kind="ghost" onClick={async () => { if (await ask.confirm({ title: 'Delete this conversation?', body: 'The messages are removed. Anything you saved to a project stays.', confirmLabel: 'Delete', danger: true })) { await del(`/conversations/${id}`); onChanged(); onBack(); } }}>Delete</Btn></div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" role="log" aria-live="polite">
         {ollamaDown && <Err>Ollama isn’t reachable, so the strategist can’t answer. Start it with <code>ollama serve</code>.</Err>}
@@ -132,7 +138,7 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
           <div className="flex gap-2"><Btn kind="primary" small onClick={() => decide(a.id, true)}>Approve</Btn><Btn small onClick={() => decide(a.id, false)}>Decline</Btn></div></div>))}
       <div className="border-t border-zinc-800 p-3"><Err>{err || hf.error}</Err>
         {hf.on && <div className="mb-2 flex items-center gap-2 text-xs text-zinc-400" role="status" aria-live="polite"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
-          {{ loading: 'Loading the speech model…', listening: 'Listening… just talk. Say “stop listening” to finish.', hearing: 'Hearing you…', thinking: 'Thinking…', speaking: 'Speaking… (the microphone is paused so it doesn’t hear itself)', off: '' }[hf.status]}
+          {{ loading: 'Loading the speech model…', listening: 'Listening… just talk. Say “stop listening” or use the switch to finish.', hearing: 'Hearing you…', thinking: 'Thinking…', speaking: 'Speaking… (the microphone is paused so it doesn’t hear itself)', off: '' }[hf.status]}
           {pending.length > 0 && ' · Say “approve” or “decline”.'}
           {hf.status === 'speaking' && <button type="button" className="ml-auto rounded border border-zinc-700 px-2 py-0.5 hover:bg-zinc-800" onClick={() => speech.stop()}>Stop talking</button>}</div>}
         <form onSubmit={e => { e.preventDefault(); send(); }} className="flex items-end gap-2">
@@ -140,9 +146,6 @@ function Conversation({ id, onBack, onChanged }: { id: number; onBack: () => voi
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!running) send(); } }}
             disabled={running && pending.length > 0} placeholder={running ? 'Strategist is answering…' : 'Message the strategist (Shift+Enter for a new line)'} aria-label="Message"
             className="flex-1 resize-none rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-          <button type="button" onClick={hf.toggle} aria-pressed={hf.on} title={hf.on ? 'Turn hands-free off (or say “stop listening”)' : 'Hands-free: talk to the strategist and hear its answers'}
-            className={cx('inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm', hf.on ? 'border-red-500 bg-red-950/40 text-red-300' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700')}>
-            <span className={cx('h-2 w-2 rounded-full', hf.on ? 'animate-pulse bg-red-500' : 'bg-zinc-500')} aria-hidden />🎙 {hf.on ? 'On' : 'Hands-free'}</button>
           {running ? <Btn onClick={stop} kind="danger">Stop</Btn> : <Btn type="submit" kind="primary" disabled={!text.trim()}>Send</Btn>}
         </form></div>
     </div>

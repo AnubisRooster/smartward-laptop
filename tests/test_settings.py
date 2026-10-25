@@ -73,3 +73,8 @@ class TestsNeverTouchARealLibrary(unittest.TestCase):
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=h.ROOT, timeout=60)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("smartward-test-", out.stdout)
+
+
+class UiBuildTests(unittest.TestCase):
+    def test_status_carries_a_build_number_so_an_open_window_can_offer_to_reload(self):
+        h.reset(); self.assertIsInstance(h.client.get("/api/status").json()["ui_build"], int)
