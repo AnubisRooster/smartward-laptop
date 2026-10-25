@@ -20,7 +20,7 @@ def _log(feature, model, resp):
     u = getattr(resp, "usage", None)
     ti = getattr(u, "prompt_tokens", 0) or 0; to = getattr(u, "completion_tokens", 0) or 0
     cost = 0.0
-    if not _is_local(model):
+    if not _is_local(model) and not model.endswith(":free"):
         try: cost = float(completion_cost(completion_response=resp) or 0)
         except Exception: cost = 0.0
     db.x("INSERT INTO usage(ts,feature,model,tokens_in,tokens_out,cost,local) VALUES(?,?,?,?,?,?,?)",
@@ -32,19 +32,26 @@ def _kwargs(model):
     elif db.get_setting("api_key"): kw["api_key"] = db.get_setting("api_key")
     return kw
 
-def pick_model(private=False):
-    """Background work falls back to the local model once the cloud budget is spent; private never leaves."""
+def pick_model(private=False, feature="chat"):
+    """Background work falls back to the local model once the cloud budget is spent; private never leaves.
+    An OpenRouter model answers chat only, unless Settings says "everything": free models are rate-limited and may keep what they are sent."""
     model = db.get_setting("model")
+    if model.startswith("openrouter/") and feature != "chat" and (db.get_setting("cloud_scope") or "chat") == "chat":
+        return db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
     if not _is_local(model) and (private or budget_left() <= 0):
         return db.DEFAULTS["model"] if _is_local(db.DEFAULTS["model"]) else "ollama_chat/llama3.2:3b"
     return model
 
 def chat(messages, feature="chat", private=False, tools=None, tool_choice=None, model=None, temperature=0.3, timeout=300):
     from litellm import completion
-    model = model or pick_model(private)
+    model = model or pick_model(private, feature)
     kw = _kwargs(model)
     if tools: kw["tools"] = tools; kw["tool_choice"] = tool_choice or "auto"
-    resp = completion(messages=messages, temperature=temperature, timeout=timeout, **kw)
+    try: resp = completion(messages=messages, temperature=temperature, timeout=timeout, **kw)
+    except Exception as e:
+        if not tools or not re.search(r"tool|function", str(e), re.I): raise
+        kw.pop("tools", None); kw.pop("tool_choice", None)      # some models (many free ones) can't call tools: answer without them
+        resp = completion(messages=messages, temperature=temperature, timeout=timeout, **kw)
     _log(feature, model, resp)
     return resp.choices[0].message
 
@@ -53,7 +60,7 @@ def text(messages, feature="chat", **kw):
 
 def stream(messages, feature="chat", private=False, model=None):
     from litellm import completion
-    model = model or pick_model(private)
+    model = model or pick_model(private, feature)
     resp = completion(messages=messages, stream=True, temperature=0.4, **_kwargs(model))
     for part in resp:
         d = part.choices[0].delta

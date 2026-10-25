@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -356,6 +356,22 @@ def usage():
 @app.get("/api/models")
 def models():
     pre = preflight(); return {"ollama": pre["models"], "current": db.get_setting("model"), "embed": db.get_setting("embed_model"), "ollama_up": pre["ollama"]}
+
+@app.get("/api/openrouter/models")
+def openrouter_models(refresh: bool = False):
+    """The models OpenRouter lets you use for free. Public list: this is the one request SmartWard makes to openrouter.ai before you choose one."""
+    try: return {"models": openrouter.free_models(force=refresh)}
+    except Exception as e: bad("Couldn’t reach OpenRouter to get the list (" + type(e).__name__ + "). Check your connection and try again.", 502)
+
+@app.post("/api/models/test")
+def models_test():
+    """One tiny request to the chosen model, so a wrong key or a rate limit shows up here instead of in the middle of a chat."""
+    model = db.get_setting("model")
+    try: llm.chat([{"role": "user", "content": "Reply with the single word: ok"}], feature="test", model=model, timeout=60)
+    except Exception as e:
+        msg = str(e).replace(db.get_setting("api_key") or "\0", "•••")
+        bad(msg.splitlines()[-1][:300] if msg else type(e).__name__, 502)
+    return {"ok": True, "model": model}
 
 # ---------- onboarding ----------
 @app.post("/api/onboarding/propose")

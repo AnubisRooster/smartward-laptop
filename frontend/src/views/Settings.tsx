@@ -44,6 +44,7 @@ export default function Settings() {
         <Field label="Other model (advanced)" hint="Any litellm model id, e.g. ollama_chat/qwen2.5:7b, gpt-4o, anthropic/claude-sonnet-4-5, openrouter/…"><div className="flex gap-2"><input className={inputCls} value={v('model') || ''} onChange={e => set('model', e.target.value)} /><Btn onClick={() => save({ model: v('model') })}>Use</Btn></div></Field>
         <Field label="Embedding model (Ollama)"><div className="flex gap-2"><input className={inputCls} value={v('embed_model') || ''} onChange={e => set('embed_model', e.target.value)} /><Btn onClick={() => save({ embed_model: v('embed_model') })}>Use</Btn></div></Field>
         <Field label="API key for a cloud model (stored on this device, never shown again)"><div className="flex gap-2"><input type="password" className={inputCls} placeholder={s.api_key ? '•••••••• (saved)' : 'sk-…'} value={local.api_key || ''} onChange={e => set('api_key', e.target.value)} /><Btn onClick={() => { save({ api_key: local.api_key }); set('api_key', ''); }} disabled={!local.api_key}>Save</Btn>{s.api_key && <Btn kind="danger" onClick={() => save({ api_key: '' })}>Remove</Btn>}</div></Field>
+        <OpenRouter s={s} model={v('model') || ''} save={save} />
         <Row><span>Ollama</span><span className="flex items-center gap-2">{models?.ollama_up ? <Badge tone="green">Running · {models.ollama.length} models</Badge> : <Badge tone="red">Not reachable</Badge>}<Btn small onClick={async () => { const m = await get('/models'); (m.ollama_up ? toast.ok(`Ollama is running with ${m.ollama.length} models`) : toast.error('Ollama isn’t reachable. Start it with “ollama serve”.')); reloadModels(); }}>Test connection</Btn></span></Row>
       </Section>
 
@@ -152,5 +153,37 @@ function Appearance() {
     <Section title="Appearance" desc="Follow your computer’s light or dark setting, or pick one.">
       <Row><span>Theme</span><Seg value={pref} onChange={(x: string) => { setP(x as ThemePref); setPref(x as ThemePref); }} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} /></Row>
     </Section>
+  );
+}
+
+function OpenRouter({ s, model, save }: { s: any; model: string; save: (v: any) => Promise<void> }) {
+  const [list, setList] = useState<any[] | null>(null); const [q, setQ] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const current = model.startsWith('openrouter/');
+  const load = async (refresh = false) => { setBusy(true); setErr(''); try { setList((await get('/openrouter/models', { refresh })).models); } catch (e) { setErr(errText(e)); } setBusy(false); };
+  const test = async () => { setBusy(true); try { await post('/models/test'); toast.ok('The model answered.'); } catch (e) { toast.error(errText(e)); } setBusy(false); };
+  const shown = (list || []).filter(m => !q.trim() || (m.name + ' ' + m.id).toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <details className="rounded-lg border border-zinc-800 p-3" open={current || undefined}>
+      <summary className="cursor-pointer text-sm font-medium">OpenRouter free models{current && <span className="ml-2 text-xs font-normal text-emerald-400">in use: {model.replace('openrouter/', '')}</span>}</summary>
+      <div className="mt-3 space-y-3 text-sm">
+        <div className="text-xs text-zinc-500">Free models run on OpenRouter’s servers, so what you ask (and any library text the strategist includes) leaves this computer, and free providers may keep it. Private repo content and off-the-record chats always stay on the local model.
+          You need an OpenRouter key: create one at <a className="text-indigo-300 underline" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer noopener">openrouter.ai/keys</a> and paste it into “API key” below. Free models are rate-limited.</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Btn small onClick={() => load(false)} loading={busy && !list}>{list ? 'Refresh list' : 'Browse free models'}</Btn>
+          {list && <input className={inputCls + ' max-w-xs'} placeholder={`Search ${list.length} free models…`} aria-label="Search free models" value={q} onChange={e => setQ(e.target.value)} />}
+          {current && <><Btn small onClick={test} loading={busy && !!list}>Test the model</Btn><Btn small kind="ghost" onClick={() => save({ model: 'ollama_chat/llama3.2:3b' })}>Go back to local</Btn></>}
+        </div>
+        <Err>{err}</Err>
+        {list && <ul className="max-h-72 space-y-1 overflow-y-auto" role="listbox" aria-label="Free models">{shown.map(m => (
+          <li key={m.id}><button type="button" role="option" aria-selected={model === m.model} onClick={() => save({ model: m.model })}
+            className={'w-full rounded-lg border px-3 py-2 text-left ' + (model === m.model ? 'border-indigo-500 bg-indigo-950/30' : 'border-zinc-800 hover:bg-zinc-900')}>
+            <span className="flex items-center justify-between gap-2"><span className="font-medium">{m.name}</span><span className="flex shrink-0 gap-1.5"><Badge>{Math.round(m.context / 1000)}k context</Badge>{m.tools ? <Badge tone="green">tools</Badge> : <Badge tone="amber">no tools</Badge>}</span></span>
+            <span className="block truncate text-xs text-zinc-500">{m.id}</span></button></li>))}
+          {shown.length === 0 && <li className="text-xs text-zinc-500">No free model matches.</li>}</ul>}
+        {list && <div className="text-xs text-zinc-500">“No tools” models can chat but can’t search your library or fetch pages for you.</div>}
+        {current && <Row><span>Use it for</span><Seg value={s.cloud_scope || 'chat'} onChange={x => save({ cloud_scope: x })} options={[['chat', 'Chat only'], ['everything', 'Everything']]} /></Row>}
+        {current && <div className="text-xs text-zinc-500">“Chat only” keeps summaries, indexing and the knowledge graph on the local model (recommended; free models are rate-limited).</div>}
+      </div>
+    </details>
   );
 }
