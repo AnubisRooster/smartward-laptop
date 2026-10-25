@@ -45,6 +45,19 @@ Everything runs on this computer: `stt/listen.py` (microphone via `arecord`, a s
 only while hands-free is on, and stopped by it when the page stops asking. Install it once with `stt/setup.sh` (about 500 MB: the Python packages and the `small.en` model;
 `MODEL=base.en stt/setup.sh` for a smaller one). English only with `.en` models.
 
+## From your phone (Tailscale, no app store)
+
+Settings → **Remote access** walks through it. The API still listens only on `127.0.0.1`; [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) publishes it to *your own devices* at
+`https://<laptop>.<tailnet>.ts.net` (`tailscale serve --bg 127.0.0.1:8000`; never Funnel, which is public). On the phone you sign in once with a remote passphrase, then Add to Home Screen.
+
+- **Off by default.** `sw/remote.py` is the front door: a request that came through the proxy must be from the allowed Tailscale account and Tailscale host name, carry a sign-in session
+  (30-day cookie, `HttpOnly; Secure; SameSite=Strict`, stored hashed), and use only the phone allow-list. Phones can read, chat, talk and save links; they cannot change settings, back up, export, erase,
+  change the app lock or sources, or touch the laptop's microphone. Five wrong passphrases lock sign-in for five minutes. Requests whose `Host` isn't a loopback name are refused even locally (DNS rebinding).
+- **Talking from the phone.** The phone cuts what you say into sentences on the phone (`frontend/src/vad.ts`), sends each as a small WAV to `POST /api/voice/transcribe`, and the laptop's Whisper turns it into
+  text (`stt/worker.py`). Nothing goes to Apple or Google. Answers are spoken by the natural voice through `/api/tts`.
+- **Availability.** It works only while the laptop is awake and SmartWard is running. "Keep this laptop awake" holds a `systemd-inhibit` lock while remote access is on; closing the lid still suspends it.
+- **Tests:** `tests/test_remote.py` (the front door, with each check proven to matter), `tests/test_remote_panel.py`, `tests/test_stt.py`.
+
 ## Models
 
 Default chat model `ollama_chat/llama3.2:3b`; override in Settings or with `SMARTWARD_MODEL`.
