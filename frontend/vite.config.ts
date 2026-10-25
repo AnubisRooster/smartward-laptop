@@ -8,6 +8,13 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: { output: { manualChunks(id: string) {
+      if (id.includes('force-graph') || id.includes('d3-') || id.includes('kapsule')) return 'graph';
+      if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('micromark') || id.includes('mdast') || id.includes('hast') || id.includes('unified')) return 'markdown';
+      if (id.includes('node_modules/react')) return 'react';
+    } } },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

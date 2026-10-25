@@ -2,12 +2,14 @@ import axios from 'axios';
 
 // Served by the API itself (browser) -> same origin. Inside the Tauri webview -> talk to localhost:8000.
 export const BASE = typeof location !== 'undefined' && location.port === '8000' ? '' : 'http://localhost:8000';
-export const http = axios.create({ baseURL: BASE + '/api', timeout: 600000 });
+export const http = axios.create({ baseURL: BASE + '/api', timeout: 30000 });
+// Changes can start slow work (fetching a page, building a brief), so they get longer than reads.
+const LONG = { timeout: 300000 };
 
 export const get = <T = any>(url: string, params?: any) => http.get<T>(url, { params }).then(r => r.data);
-export const post = <T = any>(url: string, body?: any) => http.post<T>(url, body ?? {}).then(r => r.data);
-export const put = <T = any>(url: string, body?: any) => http.put<T>(url, body ?? {}).then(r => r.data);
-export const patch = <T = any>(url: string, body?: any) => http.patch<T>(url, body ?? {}).then(r => r.data);
+export const post = <T = any>(url: string, body?: any) => http.post<T>(url, body ?? {}, LONG).then(r => r.data);
+export const put = <T = any>(url: string, body?: any) => http.put<T>(url, body ?? {}, LONG).then(r => r.data);
+export const patch = <T = any>(url: string, body?: any) => http.patch<T>(url, body ?? {}, LONG).then(r => r.data);
 export const del = <T = any>(url: string) => http.delete<T>(url).then(r => r.data);
 
 export const errText = (e: any): string =>

@@ -116,7 +116,7 @@ function Backup() {
   const [pw, setPw] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [ok, setOk] = useState(''); const file = useRef<HTMLInputElement>(null);
   const doBackup = async () => {
     setBusy(true); setErr(''); setOk('');
-    try { const r = await http.post('/backup', { passphrase: pw }, { responseType: 'blob' }); const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = 'smartward-backup.swbk'; a.click(); URL.revokeObjectURL(url); setOk('Backup downloaded.'); }
+    try { const r = await http.post('/backup', { passphrase: pw }, { responseType: 'blob', timeout: 300000 }); const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = 'smartward-backup.swbk'; a.click(); URL.revokeObjectURL(url); setOk('Backup downloaded.'); }
     catch (e: any) { setErr(e?.response?.data instanceof Blob ? JSON.parse(await e.response.data.text()).detail : errText(e)); }
     setBusy(false);
   };

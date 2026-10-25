@@ -16,7 +16,16 @@ export default function GraphView() {
   const box = useRef<HTMLDivElement>(null); const fg = useRef<any>(null); const [sz, setSz] = useState({ w: 400, h: 400 });
   useEffect(() => { fg.current?.d3Force?.('charge')?.strength(-160); fg.current?.d3Force?.('link')?.distance(70); }, [data]);
   useEffect(() => { const el = box.current; if (!el) return; const ro = new ResizeObserver(() => setSz({ w: el.clientWidth, h: el.clientHeight })); ro.observe(el); return () => ro.disconnect(); }, [mode]);
-  const gdata = useMemo(() => data ? { nodes: data.themes.map((t: any) => ({ ...t, val: 2 + t.strength * 3 })), links: data.edges.map((e: any) => ({ source: e.a, target: e.b, w: e.weight })) } : { nodes: [], links: [] }, [data]);
+  // Keep each node's object (and so its position) across refreshes: the graph updates in place instead of re-laying out.
+  const nodeCache = useRef(new Map<number, any>()); const fitted = useRef('');
+  const scopeKey = `${scope}:${scopeId}:${dormant}`;
+  const gdata = useMemo(() => {
+    if (!data) return { nodes: [], links: [] };
+    const seen = new Set<number>();
+    const nodes = data.themes.map((t: any) => { seen.add(t.id); const old = nodeCache.current.get(t.id); const n = old ? Object.assign(old, t, { val: 2 + t.strength * 3 }) : { ...t, val: 2 + t.strength * 3 }; nodeCache.current.set(t.id, n); return n; });
+    for (const k of [...nodeCache.current.keys()]) if (!seen.has(k)) nodeCache.current.delete(k);
+    return { nodes, links: data.edges.map((e: any) => ({ source: e.a, target: e.b, w: e.weight })) };
+  }, [data]);
   const themes: any[] = data?.themes || [];
 
   return (
@@ -31,19 +40,20 @@ export default function GraphView() {
               {(projs || []).map(p => <option key={'p' + p.id} value={`project:${p.id}`}>Project: {p.name}</option>)}
               {(srcs || []).map(s => <option key={'s' + s.id} value={`source:${s.id}`}>Source: {s.name}</option>)}</select>
             <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={dormant} onChange={e => setDormant(e.target.checked)} />Show dormant</label>
-            <span className="text-xs text-zinc-600">Strongest themes, with older mentions fading.</span></div></div>
+            <span className="text-xs text-zinc-600">Strongest themes, with older mentions fading.</span></div>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400" aria-label="Legend">{[...new Set(themes.map(t => t.type))].sort().map(t => <li key={t} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[t] || COLORS.other }} aria-hidden />{t}</li>)}</ul></div>
         <Err>{error}</Err>
         <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
           {themes.length === 0 ? (
             <Empty icon="⁂" title="No themes in this scope">{scope !== 'all' || !dormant ? <>Themes appear as articles are read and indexed. <div className="mt-3"><Btn onClick={() => { setScope('all'); setScopeId(undefined); setDormant(true); }}>Show every theme</Btn></div></> : 'Themes appear as articles are indexed.'}</Empty>
           ) : mode === 'graph' ? (
-            <ForceGraph2D ref={fg} onEngineStop={() => fg.current?.zoomToFit(400, 70)} d3VelocityDecay={0.3} width={sz.w} height={sz.h} graphData={gdata} backgroundColor="rgba(0,0,0,0)" cooldownTicks={120}
+            <ForceGraph2D ref={fg} onEngineStop={() => { if (fitted.current !== scopeKey) { fitted.current = scopeKey; fg.current?.zoomToFit(400, 70); } }} d3VelocityDecay={0.3} width={sz.w} height={sz.h} graphData={gdata} backgroundColor="rgba(0,0,0,0)" cooldownTicks={120}
               nodeLabel={(n: any) => `${n.name} (${n.type})`} onNodeClick={(n: any) => go('graph', { themeId: n.id })}
               linkColor={() => 'rgba(113,113,122,.5)'} linkWidth={(l: any) => Math.min(4, l.w)}
               nodeCanvasObject={(n: any, ctx: CanvasRenderingContext2D, k: number) => {
                 const r = 3 + n.strength * 2; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.fillStyle = COLORS[n.type] || COLORS.other; ctx.globalAlpha = n.dormant ? 0.35 : 1; ctx.fill();
                 if (n.id === sel) { ctx.lineWidth = 1.5 / k; ctx.strokeStyle = '#fff'; ctx.stroke(); }
-                ctx.globalAlpha = 1; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k);
+                ctx.globalAlpha = 1; if (k < 0.8 && n.strength < 2 && n.id !== sel) return; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k);
               }} />
           ) : (
             <ul className="h-full overflow-y-auto" aria-label="Themes">{themes.map(t => (

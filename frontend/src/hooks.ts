@@ -29,25 +29,38 @@ export function useHashSync() {
 }
 
 /** Fetch + refetch helper. `deps` re-run; `every` polls (ms). */
+/** True when two payloads are the same JSON, so an unchanged poll doesn't re-render. */
+export const sameData = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Loads `url`, optionally every `every` ms. Polling pauses while the window is hidden and catches up
+ * when it comes back; an unchanged payload is ignored; an older response never overwrites a newer one;
+ * data stays on screen while the same endpoint reloads (no spinner flash).
+ */
 export function useLoad<T = any>(url: string | null, params?: any, every?: number) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setDataState] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const key = JSON.stringify([url, params]);
-  const alive = useRef(true);
+  const seq = useRef(0); const lastUrl = useRef(url); const current = useRef<T | null>(null);
+  const put = useCallback((u: T | null | ((d: T | null) => T | null)) => { const v = typeof u === 'function' ? (u as any)(current.current) : u; if (!sameData(current.current, v)) { current.current = v; setDataState(v); } }, []);
   const reload = useCallback(async () => {
     if (!url) return;
-    try { setData(await get<T>(url, params)); setError(null); }
-    catch (e: any) { setError(e?.response?.data?.detail || e?.message || 'Failed'); }
-    finally { if (alive.current) setLoading(false); }
+    const mine = ++seq.current;
+    try { const r = await get<T>(url, params); if (mine === seq.current) { put(r); setError(null); } }
+    catch (e: any) { if (mine === seq.current) setError(e?.response?.data?.detail || e?.message || 'Failed'); }
+    finally { if (mine === seq.current) setLoading(false); }
   }, [key]);
   useEffect(() => {
-    alive.current = true; setLoading(true); reload();
-    if (!every) return () => { alive.current = false; };
-    const id = setInterval(reload, every);
-    return () => { alive.current = false; clearInterval(id); };
+    if (lastUrl.current !== url) { lastUrl.current = url; put(null); setLoading(true); }
+    reload();
+    if (!every) return () => { seq.current++; };
+    const tick = () => { if (!document.hidden) reload(); };
+    const id = setInterval(tick, every);
+    document.addEventListener('visibilitychange', tick);
+    return () => { seq.current++; clearInterval(id); document.removeEventListener('visibilitychange', tick); };
   }, [reload, every]);
-  return { data, error, loading, reload, setData };
+  return { data, error, loading, reload, setData: put };
 }
 
 /** What the speaker settings add up to right now. */

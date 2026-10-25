@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { get, post } from './api';
 import { Tab, useHashSync, useLoad, useNav, speech } from './hooks';
-import { Progress, cx } from './ui';
+import { Progress, Spin, cx } from './ui';
 import { FeedbackHost } from './feedback';
 import { Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Today from './views/Today';
 import Reading from './views/Reading';
-import GraphView from './views/Graph';
-import Chat from './views/Chat';
-import Projects from './views/Projects';
-import Settings from './views/Settings';
+const GraphView = lazy(() => import('./views/Graph'));
+const Chat = lazy(() => import('./views/Chat'));
+const Projects = lazy(() => import('./views/Projects'));
+const Settings = lazy(() => import('./views/Settings'));
 import Onboarding from './views/Onboarding';
 import { onDesktopEvent } from './desktop';
 
@@ -103,7 +103,7 @@ export default function App() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {p.running && tab !== 'reading' && (
           <div className="border-b border-zinc-800 bg-zinc-900/60 px-4 py-2"><Progress value={pct} label={`${p.step || 'Working'}… ${p.total ? `${p.done} of ${p.total}` : ''}`} /></div>)}
-        <div className="min-h-0 flex-1 overflow-hidden"><Body /></div>
+        <div className="min-h-0 flex-1 overflow-hidden"><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></div>
       </main>
       <FeedbackHost />
     </div>

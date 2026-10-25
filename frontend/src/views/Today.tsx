@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { errText, get, post } from '../api';
+import { errText, get, http, post } from '../api';
 import { speech, useLoad, useNav, useSpeech } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Spin, Title } from '../ui';
 
@@ -8,7 +8,7 @@ export default function Today() {
   const { data: unread } = useLoad<any>('/articles', { filter: 'unread', sort: 'relevant', limit: 5 });
   const { go, openArticle } = useNav(); const sp = useSpeech();
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const rebuild = async () => { setBusy(true); setErr(''); try { setData(await get('/digest', { rebuild: true })); } catch (e) { setErr(errText(e)); } setBusy(false); };
+  const rebuild = async () => { setBusy(true); setErr(''); try { setData(await http.get('/digest', { params: { rebuild: true }, timeout: 300000 }).then(r => r.data)); } catch (e) { setErr(errText(e)); } setBusy(false); };
 
   const brief = async () => {
     const items: any[] = unread?.items || []; const rate = (await get('/settings')).voice_rate || 1;
