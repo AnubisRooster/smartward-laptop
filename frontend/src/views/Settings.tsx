@@ -5,10 +5,11 @@ import { Badge, Btn, Card, Err, Field, inputCls, Seg, Spin, Title } from '../ui'
 import { ask, toast } from '../feedback';
 import VoiceSettings from './VoiceSettings';
 import DesktopSettings from './DesktopSettings';
+import RemoteSettings from './RemoteSettings';
 import { readPref, setPref, ThemePref } from '../theme';
 
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
-const SECTIONS = ['Appearance', 'Notifications', 'Model', 'Interests & relevance', 'Usage & budget', 'Background refresh', 'Voice', 'Desktop', 'App lock', 'GitHub', 'Export', 'Backup & restore', 'Developer'];
+const SECTIONS = ['Appearance', 'Notifications', 'Remote access', 'Model', 'Interests & relevance', 'Usage & budget', 'Background refresh', 'Voice', 'Desktop', 'App lock', 'GitHub', 'Export', 'Backup & restore', 'Developer'];
 const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div id={slug(title)} className="scroll-mt-16"><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
 const money = (n: number) => '$' + (n || 0).toFixed(n < 1 ? 3 : 2);
@@ -37,6 +38,8 @@ export default function Settings() {
         {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval']] as const).map(([k, label]) =>
           <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s[k] !== false} onChange={e => save({ [k]: e.target.checked })} />{label}</label>)}
       </Section>
+
+      <RemoteSettings />
 
       <Section title="Model" desc="SmartWard runs on a local Ollama model. You can instead bring your own key for a cloud model.">
         <Field label="Chat model"><div className="flex gap-2"><select className={inputCls} value={(models?.ollama || []).some((m: string) => 'ollama_chat/' + m === v('model')) ? v('model') : '__custom'} onChange={e => e.target.value !== '__custom' && save({ model: e.target.value })}>

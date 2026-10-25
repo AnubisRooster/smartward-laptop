@@ -33,6 +33,7 @@ if os.path.realpath(db.DB_PATH) != os.path.realpath(os.path.join(DATA, "smartwar
 def reset():
     """Empty every table, so each test starts from a blank library."""
     assert os.path.realpath(db.DB_PATH).startswith(os.path.realpath(tempfile.gettempdir())), "not a temporary library"
+    from sw import awake; awake.release()
     with db.tx() as c:
         for t in ALL_TABLES:
             c.execute(f"DELETE FROM {t}")

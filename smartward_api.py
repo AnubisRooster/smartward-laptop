@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -264,7 +264,7 @@ def remote_logout(request: Request, response: Response):
 @app.get("/api/remote/status")
 def remote_status():
     return {"enabled": remote.enabled(), "login": db.get_setting("remote_login") or "", "host": db.get_setting("remote_host") or "",
-            "has_passphrase": bool(db.get_setting("remote_hash")), "sessions": remote.list_sessions(), "log": (db.get_setting("remote_log") or [])[-20:]}
+            "has_passphrase": bool(db.get_setting("remote_hash")), "keep_awake": db.get_setting("remote_keep_awake") is not False, "awake_held": awake.running(), "sessions": remote.list_sessions(), "log": (db.get_setting("remote_log") or [])[-20:]}
 
 @app.put("/api/remote/config")
 def remote_config(body: dict):
@@ -276,7 +276,12 @@ def remote_config(body: dict):
     if "enabled" in body:
         if body["enabled"] and not (db.get_setting("remote_hash") and db.get_setting("remote_login")): bad("Set a passphrase and your Tailscale login before turning remote access on.")
         db.set_setting("remote_enabled", bool(body["enabled"])); remote.log("turned on" if body["enabled"] else "turned off")
+    if "keep_awake" in body: db.set_setting("remote_keep_awake", bool(body["keep_awake"]))
+    awake.sync()
     return remote_status()
+
+@app.get("/api/remote/tailscale")
+def remote_tailscale(): return tailscale.info()
 
 @app.post("/api/remote/revoke")
 def remote_revoke(body: dict): remote.revoke(str(body.get("id", "all"))); return remote_status()
@@ -600,10 +605,10 @@ def _scheduler():
         time.sleep(60)
 
 @app.on_event("shutdown")
-def _close_microphone(): stt.stop()
+def _close_microphone(): stt.stop(); stt.stop_worker(); awake.release()
 
 @app.on_event("startup")
-def _start(): bg(_scheduler)
+def _start(): bg(_scheduler); awake.sync()
 
 _UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 if os.path.isdir(_UI): app.mount("/", StaticFiles(directory=_UI, html=True), name="ui")
