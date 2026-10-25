@@ -14,7 +14,7 @@ Local-first research strategist, ported from the iPhone app. Everything runs on 
 
 ```bash
 sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential pkg-config nodejs npm
-python3 -m pip install --break-system-packages litellm mcp pydantic trafilatura fastapi uvicorn cryptography numpy lxml httpx
+python3 -m pip install --break-system-packages -r requirements.txt
 ollama pull llama3.2:3b && ollama pull nomic-embed-text   # chat + on-device embeddings
 ```
 
@@ -29,6 +29,7 @@ If it isn't running, the browser's own voice reads instead.
 the speaking rate, and **reading profiles**: named voice-and-speed combinations such as a calm evening reader and a fast commute one.
 The profile in use replaces the voice and rate above.
 
+- Install it on a new machine with `tts/setup.sh` (needs `uv` or Python 3.10–3.13, and the system's `libespeak-ng1`).
 - Start or stop it by hand: `~/SmartWardApp/tts/start.sh` / `~/SmartWardApp/tts/start.sh stop` (log: `tts/tts.log`).
 - It uses your system's espeak-ng (`libespeak-ng1`, `espeak-ng-data`).
 - The native Tauri window (`SMARTWARD_NATIVE=1`) was not rebuilt for this change; use the browser window, or rebuild it (see below).
@@ -57,7 +58,30 @@ Apple Foundation Models (a local Ollama model is used instead).
 ## Build the native window (optional)
 
 ```bash
-cd ~/smartward-ui && . ~/.cargo/env && npm run tauri build -- --no-bundle
+cd ~/SmartWardApp/frontend && . ~/.cargo/env && npm run tauri build -- --no-bundle
 cp src-tauri/target/release/smartward-ui ~/SmartWardApp/resources/smartward-ui-bin/
-rm -rf ~/SmartWardApp/ui && cp -r dist ~/SmartWardApp/ui   # the browser version served by the API
+scripts/build_ui.sh        # the browser version served by the API
 ```
+
+## Development
+
+The app is a Python API (`smartward_api.py`, `sw/`) plus a React front end (`frontend/`, built into `ui/`, which the API serves).
+The natural voice lives in `tts/`. Your library is **not** in this folder: it is `~/.local/share/smartward/` (SQLite), and Settings → Backup & restore writes an encrypted copy.
+
+| | |
+|---|---|
+| `scripts/check.sh` | Everything: the Python tests, shell syntax, front-end type check. Run it before and after any change. (`--build` also rebuilds the UI.) |
+| `python3 -m unittest discover -s tests -t .` | Only the Python tests (about 60, a few seconds). They use a throwaway data folder, no model, no network. |
+| `scripts/build_ui.sh` | Rebuild the front end into `ui/` (reload the page; restart the API only if `sw/` or `smartward_api.py` changed). |
+| `scripts/smoke.sh` | Read-only check that the *running* app answers: API, settings, voice status, UI. Run it after restarting. |
+| `bin/start_smartward.sh stop`, then start | Restart the API and voice server. |
+
+**Updating the app.** Make a change, run `scripts/check.sh`, rebuild the UI if you touched `frontend/`, restart, run `scripts/smoke.sh`, then commit.
+Back up first (Settings → Backup & restore) before anything that touches the database layout (`sw/db.py`).
+
+**Keeping the features you use.** The tests cover: reading (filters, search, star/read), sources (validation, feed parsing, the private-network refusals),
+the knowledge graph (rename/merge/split, digest), projects (brief history, suggestions, items, links), chat rules (which tools each mode gets, approvals, untrusted-text fencing),
+export and encrypted backup/restore (private content, wrong passphrase), the app lock, usage and budget, and the natural voice. When you start relying on something new, add a test for it in `tests/`.
+
+**Following the iPhone app.** This is a port, not a fork: upstream SmartWard changes do not arrive by themselves. Watch
+[AnubisRooster/SmartWard](https://github.com/AnubisRooster/SmartWard) and port what you want, with a test.
