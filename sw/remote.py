@@ -23,7 +23,7 @@ ALLOW = [
     _R("POST", r"/api/articles/mark-read"), _R("POST", r"/api/articles/\d+/(summary|full|discuss)"), _R("PATCH", r"/api/articles/\d+"),
     _R("POST", r"/api/share"), _R("POST", r"/api/tts"), _R("POST", r"/api/voice/transcribe"),
     _R("POST", r"/api/conversations"), _R("POST", r"/api/conversations/\d+/(send|cancel)"), _R("DELETE", r"/api/conversations/\d+"),
-    _R("POST", r"/api/approvals/[0-9a-f]+"), _R("POST", r"/api/projects/\d+/items"), _R("PATCH", r"/api/items/\d+"),
+    _R("POST", r"/api/approvals/[0-9a-f]+"), _R("POST", r"/api/projects/\d+/items"), _R("GET", r"/api/projects/\d+/implications"), _R("POST", r"/api/implications/\d+/(accept|dismiss)"), _R("PATCH", r"/api/items/\d+"),
     _R("POST", r"/api/remote/logout"),
 ]
 PUBLIC = [_R("POST", r"/api/remote/login"), _R("GET", r"/api/remote/session")]

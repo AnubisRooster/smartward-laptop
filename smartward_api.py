@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -360,6 +360,38 @@ def developments_status():
 def developments_list(limit: int = 100, article_id: Optional[int] = None, domain: Optional[str] = None, kind: Optional[str] = None):
     return developments.listing(min(limit, 500), article_id, domain, kind)
 
+@app.post("/api/projects/{pid}/implications/run")
+def implications_run(pid: int):
+    """Ask what the recent developments could mean for this project. Runs in the background; poll /api/implications/status."""
+    if implications.STATE["running"]: bad("Already running.", 409)
+    def work():
+        implications.STATE.update(running=True, message="")
+        try: implications.STATE["message"] = json.dumps(implications.generate(pid))
+        except llm.Unavailable as e: implications.STATE["message"] = json.dumps({"error": str(e)[:240] + " (waiting is fine; try again later)"})
+        except Exception as e: implications.STATE["message"] = json.dumps({"error": str(e)[:240]})
+        finally: implications.STATE["running"] = False
+    bg(work); return {"started": True}
+
+@app.get("/api/implications/status")
+def implications_status():
+    try: last = json.loads(implications.STATE["message"]) if implications.STATE["message"] else None
+    except ValueError: last = None
+    return {"running": implications.STATE["running"], "last": last}
+
+@app.get("/api/projects/{pid}/implications")
+def implications_list(pid: int, status: Optional[str] = None): return implications.listing(pid, status)
+
+@app.post("/api/implications/{hid}/accept")
+def implications_accept(hid: int):
+    try: return implications.accept(hid)
+    except LookupError as e: bad(str(e), 404)
+
+@app.post("/api/implications/{hid}/dismiss")
+def implications_dismiss(hid: int, body: dict):
+    try: implications.dismiss(hid, str(body.get("reason", "")))
+    except LookupError as e: bad(str(e), 404)
+    return {"ok": True}
+
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)
 
@@ -420,7 +452,7 @@ def project_put(pid: int, body: dict):
     return {"ok": True}
 @app.delete("/api/projects/{pid}")
 def project_del(pid: int):
-    for t in ("items", "project_links", "brief_history"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
+    for t in ("items", "project_links", "brief_history", "hypotheses"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
     db.x("DELETE FROM projects WHERE id=?", (pid,)); return {"ok": True}
 @app.post("/api/projects/{pid}/suggest")
 def project_suggest(pid: int):
@@ -574,7 +606,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}

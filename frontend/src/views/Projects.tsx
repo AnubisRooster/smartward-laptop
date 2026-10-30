@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ago, del, errText, patch, post, put } from '../api';
+import { ago, del, errText, get, patch, post, put } from '../api';
 import { useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Spin, Title, cx } from '../ui';
 import { ask, toast } from '../feedback';
@@ -80,6 +80,8 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
           <input className={inputCls} value={link} onChange={e => setLink(e.target.value)} placeholder="https://… or https://github.com/owner/repo" /><Btn type="submit">Add link</Btn></form>
         <div className="mt-1 text-xs text-zinc-500">GitHub links sync docs and manifests read-only; SmartWard never writes back. Private repo content stays on this device. For private repos add a token in Settings.</div></Card>
 
+      <Implications pid={id} onAccepted={() => { reload(); onChanged(); }} />
+
       <Card><h2 className="mb-2 font-medium">Related reading</h2>
         {p.related.length === 0 ? <div className="text-sm text-zinc-500">Nothing yet. Articles show up here when they’re shared to this project, cover its themes, or name one of its pinned tools.</div> :
           <ul className="space-y-2">{p.related.map((a: any) => <li key={a.id}><button className="text-left text-sm text-indigo-300 hover:underline" onClick={() => openArticle(a.id)}>{a.title}</button><div className="text-xs text-zinc-500">{a.reason}</div></li>)}</ul>}</Card>
@@ -88,5 +90,49 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
       {hist && <Modal title="Brief history" onClose={() => setHist(false)} wide>{p.history.map((h: any) => <div key={h.id} className="flex items-center justify-between border-b border-zinc-800 py-2 text-sm"><div><div>{h.note}</div><div className="text-xs text-zinc-500">{new Date(h.ts * 1000).toLocaleString()}</div></div>
         <Btn small onClick={() => run(async () => { await post(`/projects/${id}/restore/${h.id}`); setHist(false); })}>Restore this version</Btn></div>)}</Modal>}
     </div></div>
+  );
+}
+
+
+const DIRECTION: Record<string, [string, 'green' | 'red' | 'indigo' | 'zinc']> = { accelerates: ['Could speed this up', 'green'], threatens: ['Could undercut part of this', 'red'], enables: ['Could open something new', 'indigo'], neutral: ['Worth knowing', 'zinc'] };
+
+/** What recent developments might mean for this project: hypotheses with their evidence, for you to accept into the project or dismiss. */
+function Implications({ pid, onAccepted }: { pid: number; onAccepted: () => void }) {
+  const { data, reload } = useLoad<any>(`/projects/${pid}/implications`);
+  const { openArticle } = useNav(); const [busy, setBusy] = useState(false); const [note, setNote] = useState('');
+  const look = async () => {
+    setBusy(true); setNote('');
+    try {
+      await post(`/projects/${pid}/implications/run`);
+      for (let i = 0; i < 90; i++) { await new Promise(r => setTimeout(r, 2000)); const st = await get('/implications/status'); if (!st.running) { const l = st.last || {}; setNote(l.error || l.message || `${l.new || 0} new, ${l.updated || 0} updated from ${l.evidence || 0} developments.`); break; } }
+      await reload();
+    } catch (e) { setNote(errText(e)); }
+    setBusy(false);
+  };
+  const act = async (fn: () => Promise<any>, accepted = false) => { try { await fn(); await reload(); if (accepted) onAccepted(); } catch (e) { toast.error(errText(e)); } };
+  const rows: any[] = data?.hypotheses || []; const cites = data?.citations || {};
+  const open = rows.filter(r => r.status === 'new'), done = rows.filter(r => r.status !== 'new');
+  const cite = (id: number, counter = false) => { const c = cites[id]; return c && <li key={id} className="text-xs"><span className={counter ? 'text-amber-400' : 'text-zinc-400'}>{c.evidence}</span> · {c.claim} <button className="text-indigo-300 hover:underline" onClick={() => openArticle(c.article_id)}>{c.source}</button>{c.quote && <span className="block text-zinc-500">“{c.quote}”</span>}</li>; };
+  const card = (r: any) => (
+    <li key={r.id} className="rounded-lg border border-zinc-800 p-3">
+      <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{r.headline}</span><Badge tone={DIRECTION[r.direction]?.[1]}>{DIRECTION[r.direction]?.[0] || r.direction}</Badge><Badge>{r.confidence} confidence</Badge>
+        {r.status === 'accepted' && <Badge tone="green">Added to actions</Badge>}{r.status === 'dismissed' && <Badge>Dismissed{r.reason ? `: ${r.reason}` : ''}</Badge>}</div>
+      <p className="mt-1 text-sm text-zinc-300">{r.implication}</p>
+      {r.falsifier && <p className="mt-1 text-xs text-zinc-500"><span className="font-medium">What would change my mind:</span> {r.falsifier}</p>}
+      {r.action && <p className="mt-1 text-xs text-zinc-500"><span className="font-medium">A small next step:</span> {r.action}</p>}
+      <details className="mt-1"><summary className="cursor-pointer text-xs text-zinc-500">Evidence ({r.evidence.length}{r.counter.length ? `, ${r.counter.length} against` : ''})</summary>
+        <ul className="mt-1 space-y-1">{r.evidence.map((i: number) => cite(i))}{r.counter.map((i: number) => cite(i, true))}</ul></details>
+      {r.status === 'new' && <div className="mt-2 flex gap-2"><Btn small kind="primary" onClick={() => act(() => post(`/implications/${r.id}/accept`), true)}>Add as an action</Btn>
+        <Btn small onClick={async () => { const why = await ask.prompt({ title: 'Dismiss this?', body: 'Optionally say why, so it’s clear later.', label: 'Reason (optional)', confirmLabel: 'Dismiss' }); if (why !== null) act(() => post(`/implications/${r.id}/dismiss`, { reason: why })); }}>Dismiss</Btn></div>}
+    </li>);
+  return (
+    <Card className="space-y-2">
+      <div className="flex items-center justify-between gap-2"><div><h2 className="font-medium">Implications</h2><div className="text-xs text-zinc-500">Hypotheses from what you’ve been reading, each with its evidence. Not conclusions: you decide.</div></div>
+        <Btn small onClick={look} loading={busy}>Look for implications</Btn></div>
+      {note && <div className="text-xs text-zinc-400" role="status">{note}</div>}
+      {open.length === 0 && !busy && <div className="text-sm text-zinc-500">{rows.length ? 'Nothing new to review.' : 'None yet. Press “Look for implications” to check recent developments against this project.'}</div>}
+      <ul className="space-y-2">{open.map(card)}</ul>
+      {done.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-500">Reviewed ({done.length})</summary><ul className="mt-2 space-y-2">{done.map(card)}</ul></details>}
+    </Card>
   );
 }

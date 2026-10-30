@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS domains(id INTEGER PRIMARY KEY, name TEXT, keywords T
 CREATE TABLE IF NOT EXISTS developments(id INTEGER PRIMARY KEY, article_id INTEGER, kind TEXT, subject TEXT, claim TEXT, metric TEXT, value TEXT, baseline TEXT, evidence TEXT, domains TEXT DEFAULT '[]', quote TEXT, grounded INTEGER DEFAULT 0, ts REAL, created REAL, model TEXT);
 CREATE INDEX IF NOT EXISTS ix_dev_art ON developments(article_id);
 CREATE TABLE IF NOT EXISTS development_runs(article_id INTEGER PRIMARY KEY, ts REAL, status TEXT, model TEXT, n INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS hypotheses(id INTEGER PRIMARY KEY, project_id INTEGER, headline TEXT, implication TEXT, direction TEXT, confidence TEXT, evidence TEXT DEFAULT '[]', counter TEXT DEFAULT '[]', falsifier TEXT, action TEXT, status TEXT DEFAULT 'new', reason TEXT, item_id INTEGER, created REAL, updated REAL, model TEXT);
+CREATE INDEX IF NOT EXISTS ix_hyp_proj ON hypotheses(project_id);
 CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, project_id INTEGER, kind TEXT, text TEXT, done INTEGER DEFAULT 0, ts REAL);
 CREATE TABLE IF NOT EXISTS project_links(id INTEGER PRIMARY KEY, project_id INTEGER, kind TEXT, url TEXT, private INTEGER DEFAULT 0, synced REAL, note TEXT);
 CREATE TABLE IF NOT EXISTS conversations(id INTEGER PRIMARY KEY, title TEXT, mode TEXT, project_id INTEGER, off_record INTEGER DEFAULT 0, status TEXT DEFAULT 'idle', created REAL, updated REAL);
