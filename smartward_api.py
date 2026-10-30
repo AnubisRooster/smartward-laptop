@@ -346,7 +346,7 @@ def developments_run(body: dict):
     if developments.STATE["running"]: bad("Already running.", 409)
     ids = developments.sample(int(body["sample"])) if body.get("sample") else None
     if body.get("redo"): ids = [r["article_id"] for r in db.q("SELECT article_id FROM development_runs")]       # read the same articles again with the current settings
-    bg(developments.run, ids, int(body.get("limit", 60)), None, bool(body.get("retry_failed")), bool(body.get("redo")))
+    bg(developments.run, ids, int(body.get("limit", 60)), None, bool(body.get("retry_failed")), bool(body.get("redo")), [int(x) for x in body.get("source_ids", [])] or None)
     return {"started": True, "articles": len(ids) if ids is not None else None}
 
 @app.post("/api/developments/retag")

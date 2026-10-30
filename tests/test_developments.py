@@ -197,3 +197,11 @@ class Salvage(unittest.TestCase):
         self.assertGreaterEqual(len(out), 1)
         with mock.patch("sw.llm.text", return_value=""):
             with self.assertRaises(ValueError): dv._ask(a, self.ds)
+
+
+class ByTheSourceOfTheArticle(unittest.TestCase):
+    def test_a_run_can_be_limited_to_chosen_sources(self):
+        h.reset(); db.set_setting("api_key", "sk-test"); a, b = h.add_source("A"), h.add_source("B")
+        ia = [h.add_article(a, f"a{i}", TEXT) for i in range(3)]; ib = [h.add_article(b, f"b{i}", TEXT) for i in range(3)]
+        with mock.patch("litellm.completion", return_value=reply([item()])), mock.patch("sw.llm.time.sleep"): r = dv.run(source_ids=[b], workers=1)
+        self.assertEqual(r["done"], 3); self.assertEqual({d["article_id"] for d in dv.listing()}, set(ib))

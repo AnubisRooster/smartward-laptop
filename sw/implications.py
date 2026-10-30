@@ -4,7 +4,7 @@ Code chooses the evidence (grounded developments in the project's domains, plus 
 cite it by id. Anything citing an id it was not given is dropped, confidence is capped by what the evidence can bear, and each hypothesis says what would
 change its mind. Nothing here is a conclusion: it is a reviewed-by-you list of things worth a look."""
 import json, re, time
-from . import db, llm, signals
+from . import db, developments, llm, signals
 
 DIRECTIONS = ("accelerates", "threatens", "enables", "neutral")
 CONFIDENCE = ("low", "medium", "high")
@@ -113,10 +113,16 @@ def generate(project_id):
     if len(g["evidence"]) < 3: return {"new": 0, "updated": 0, "dropped": 0, "evidence": len(g["evidence"]), "message": "Not enough recent, checked developments in this project's domains yet."}
     open_ = db.q("SELECT id,headline FROM hypotheses WHERE project_id=? AND status IN ('new','accepted')", (project_id,))
     private = bool(db.q("SELECT 1 FROM project_links WHERE project_id=? AND private=1 LIMIT 1", (project_id,)))      # a project tied to private repositories is thought about on this computer only
-    raw = llm.text([{"role": "user", "content": _prompt(p, g, [o["headline"] for o in open_])}], feature="implications", private=private)
-    data = llm.json_from(raw)
-    try: items, dropped = clean(data, g["evidence"])
-    except ValueError: raise ValueError(f"model gave no usable hypotheses (it said: {' '.join(raw.split())[:140]!r})") from None
+    items = dropped = None; raw = ""
+    for _ in range(2):                                          # an unreadable reply is worth one more try; a cut-off one is salvaged item by item
+        raw = llm.text([{"role": "user", "content": _prompt(p, g, [o["headline"] for o in open_])}], feature="implications", private=private)
+        try: items, dropped = clean(llm.json_from(raw), g["evidence"]); break
+        except ValueError:
+            data = developments.salvage(raw, "hypotheses")
+            if data:
+                try: items, dropped = clean(data, g["evidence"]); break
+                except ValueError: pass
+    if items is None: raise ValueError(f"model gave no usable hypotheses (it said: {' '.join(raw.split())[:140]!r})")
     model = llm.pick_model(private, "implications"); new = upd = 0
     for it in items:
         dup = next((o for o in open_ if similar(it["headline"], o["headline"])), None)

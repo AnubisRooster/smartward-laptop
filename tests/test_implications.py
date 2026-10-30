@@ -156,3 +156,15 @@ class Api(Setup):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Resilience(Setup):
+    def test_an_empty_reply_moves_to_the_next_model_and_a_cut_off_reply_is_salvaged(self):
+        seen = []
+        def fake(**kw):
+            seen.append(kw["model"])
+            if kw["model"] == "openrouter/poolside/laguna-s-2.1:free": return NS(choices=[NS(message=NS(content=""))], usage=NS(prompt_tokens=1, completion_tokens=0))
+            full = json.dumps({"hypotheses": [hyp([self.ids[0]]), hyp([self.ids[1]], headline="Something quite different about latency tails")]})
+            return NS(choices=[NS(message=NS(content=full[:-40]))], usage=NS(prompt_tokens=1, completion_tokens=5))       # cut off inside the second item
+        with mock.patch("litellm.completion", side_effect=fake): r = im.generate(self.pid)
+        self.assertEqual(r["new"], 1); self.assertEqual(seen[:2], ["openrouter/poolside/laguna-s-2.1:free", "openrouter/recursive/flint-v1.0:free"])

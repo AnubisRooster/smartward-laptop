@@ -92,8 +92,11 @@ def _chat_once(completion, messages, feature, model, tools, tool_choice, tempera
         if not tools or not re.search(r"tool|function", str(e), re.I): raise
         kw.pop("tools", None); kw.pop("tool_choice", None)      # some models (many free ones) can't call tools: answer without them
         resp = completion(messages=messages, temperature=temperature, timeout=timeout, **kw)
+    msg = resp.choices[0].message
+    if feature in ANALYSIS_FEATURES and not (msg.content or "").strip() and not getattr(msg, "tool_calls", None):
+        raise RuntimeError(f"{model} returned an empty reply (unavailable)")      # free models sometimes answer with nothing: try the next one
     _log(feature, model, resp)
-    return resp.choices[0].message
+    return msg
 
 def text(messages, feature="chat", **kw):
     return (chat(messages, feature, **kw).content or "").strip()
