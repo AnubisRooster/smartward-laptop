@@ -24,7 +24,7 @@ def project_domains(project, domains):
 def gather(project, now=None):
     """The evidence the model will see: grounded developments in the project's domains, strongest first, and the trend picture."""
     now = now or db.now(); ds = project_domains(project, signals.domains()); names = {d["name"] for d in ds}
-    rows = db.q("SELECT d.*, a.title, a.url, s.name source FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id "
+    rows = db.q("SELECT d.*, a.title, a.url, s.name source, s.kind skind FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id "
                 "WHERE d.grounded=1 AND d.ts>? ORDER BY d.ts DESC LIMIT 600", (now - EVIDENCE_DAYS * 86400,))
     rank = {"measured": 0, "claimed": 1, "anecdotal": 2}; pool = []
     for r in rows:
@@ -91,7 +91,7 @@ def _plain(t):
     return " ".join(t.split())
 
 
-def _cls(r): return signals.source_class("", r.get("source", ""), r.get("url", ""))
+def _cls(r): return signals.source_class(r.get("skind", ""), r.get("source", ""), r.get("url", ""))
 
 
 def cap_for(measured, articles, classes):
@@ -108,7 +108,7 @@ def recap():
     for h in db.q("SELECT id,confidence,evidence FROM hypotheses WHERE confidence!='low'"):
         ids = json.loads(h["evidence"] or "[]")
         if not ids: continue
-        rows = db.q(f"SELECT d.id,d.evidence,d.article_id,a.url,s.name source FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id WHERE d.id IN ({','.join('?' * len(ids))})", ids)
+        rows = db.q(f"SELECT d.id,d.evidence,d.article_id,a.url,s.name source,s.kind skind FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id WHERE d.id IN ({','.join('?' * len(ids))})", ids)
         if not rows: continue
         cap = cap_for(sum(1 for r in rows if r["evidence"] == "measured"), len({r["article_id"] for r in rows}), {_cls(r) for r in rows})
         if CONFIDENCE.index(h["confidence"]) > CONFIDENCE.index(cap): db.x("UPDATE hypotheses SET confidence=? WHERE id=?", (cap, h["id"])); lowered += 1
