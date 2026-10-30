@@ -140,7 +140,7 @@ def sample(n=30, now=None):
     now = now or db.now(); ds = signals.domains()
     rx = signals.keyword_regex([k for d in ds for k in d["keywords"]])
     rows = db.q("SELECT a.id,a.title,a.teaser,a.text,a.published,a.private,s.kind skind,s.name sname FROM articles a JOIN sources s ON s.id=a.source_id "
-                "WHERE a.relevant=1 AND a.private=0 AND a.published>? AND a.published<? AND length(COALESCE(a.text,a.teaser,''))>500 "
+                "WHERE a.relevant=1 AND a.private=0 AND a.published>? AND a.published<? AND length(COALESCE(NULLIF(a.text,''),a.teaser,''))>500 "
                 "AND a.id NOT IN (SELECT article_id FROM development_runs) ORDER BY a.published DESC LIMIT 600", (now - 60 * 86400, now + 86400))
     by = {}
     for r in rows:
@@ -165,7 +165,7 @@ def run(ids=None, limit=60, workers=None, retry_failed=False, redo=False, source
         if retry_failed: db.x("DELETE FROM development_runs WHERE status LIKE 'failed%'")
         if ids is None:
             only = f" AND a.source_id IN ({','.join('?' * len(source_ids))})" if source_ids else ""
-            ids = [r["id"] for r in db.q("SELECT a.id FROM articles a WHERE a.relevant=1 AND a.private=0 AND a.id NOT IN (SELECT article_id FROM development_runs) AND length(COALESCE(a.text,a.teaser,''))>500" + only + " ORDER BY a.published DESC LIMIT ?", list(source_ids or []) + [limit])]
+            ids = [r["id"] for r in db.q("SELECT a.id FROM articles a WHERE a.relevant=1 AND a.private=0 AND a.id NOT IN (SELECT article_id FROM development_runs) AND length(COALESCE(NULLIF(a.text,''),a.teaser,''))>500" + only + " ORDER BY a.published DESC LIMIT ?", list(source_ids or []) + [limit])]
         rows = [r for r in (db.q("SELECT a.*, s.name source FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id=?", (i,), one=True) for i in ids) if r]
         STATE.update(running=True, done=0, total=len(rows), paused=False, message="")
         workers = max(1, min(6, int(workers or db.get_setting("analysis_workers") or 1))); failed = 0

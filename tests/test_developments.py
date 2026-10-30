@@ -205,3 +205,11 @@ class ByTheSourceOfTheArticle(unittest.TestCase):
         ia = [h.add_article(a, f"a{i}", TEXT) for i in range(3)]; ib = [h.add_article(b, f"b{i}", TEXT) for i in range(3)]
         with mock.patch("litellm.completion", return_value=reply([item()])), mock.patch("sw.llm.time.sleep"): r = dv.run(source_ids=[b], workers=1)
         self.assertEqual(r["done"], 3); self.assertEqual({d["article_id"] for d in dv.listing()}, set(ib))
+
+
+class FreshArticlesWithOnlyAnAbstract(unittest.TestCase):
+    def test_an_article_whose_text_is_empty_but_has_a_teaser_is_read(self):
+        h.reset(); db.set_setting("api_key", "sk-test"); s = h.add_source("Fresh")
+        aid = h.add_article(s, "Fresh paper", "x"); db.x("UPDATE articles SET text='', teaser=? WHERE id=?", (TEXT, aid))
+        with mock.patch("litellm.completion", return_value=reply([item()])), mock.patch("sw.llm.time.sleep"): r = dv.run(workers=1)
+        self.assertEqual(r["done"], 1); self.assertIn(aid, dv.sample(5) + [d["article_id"] for d in dv.listing()])
