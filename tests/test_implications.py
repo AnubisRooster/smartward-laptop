@@ -75,6 +75,11 @@ class Cleaning(Setup):
     def test_counter_evidence_must_be_real_and_not_also_support(self):
         out, _ = self.clean([hyp([self.ids[0]], counter_evidence=[self.ids[0], self.ids[1], 777])]); self.assertEqual(out[0]["counter"], [self.ids[1]])
 
+    def test_the_models_references_to_internal_numbers_are_removed_from_the_text(self):
+        out, _ = self.clean([hyp([self.ids[0]], implication="FedRAMP (dev 107) and 500 orgs (dev 108) show demand [3]. Benchmarks (see 4, 5) may change (about 50%).", suggested_action="Check dev 12 and [7] first.")])
+        self.assertEqual(out[0]["implication"], "FedRAMP and 500 orgs show demand. Benchmarks (see 4, 5) may change (about 50%)."); self.assertEqual(out[0]["action"], "Check and first.")
+        self.assertNotIn("dev 107", out[0]["implication"]); self.assertNotIn("[3]", out[0]["implication"])
+
     def test_a_reply_of_the_wrong_shape_is_an_error(self):
         for bad in (None, {"x": 1}, "text"):
             with self.assertRaises(ValueError): im.clean(bad, self.ev())

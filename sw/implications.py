@@ -70,7 +70,7 @@ def clean(raw, evidence):
     by_id = {r["id"]: r for r in evidence}; out, dropped = [], 0
     for it in items[:4]:
         if not isinstance(it, dict): dropped += 1; continue
-        head = " ".join(str(it.get("headline", "")).split())[:140]; imp = " ".join(str(it.get("implication", "")).split())[:600]
+        head = _plain(it.get("headline", ""))[:140]; imp = _plain(it.get("implication", ""))[:600]
         ids = [i for i in _ints(it.get("evidence")) if i in by_id]; counter = [i for i in _ints(it.get("counter_evidence")) if i in by_id and i not in ids]
         if not head or not imp or not ids: dropped += 1; continue                       # no real evidence, no hypothesis
         direction = str(it.get("direction", "")).strip().lower(); direction = direction if direction in DIRECTIONS else "neutral"
@@ -80,9 +80,15 @@ def clean(raw, evidence):
         if CONFIDENCE.index(conf) > CONFIDENCE.index(cap): conf = cap
         if STRONG.search(head + " " + imp) and conf != "low" and measured < 2: conf = "low" if conf == "medium" else "medium"
         out.append({"headline": head, "implication": imp, "direction": direction, "confidence": conf, "evidence": ids, "counter": counter,
-                    "falsifier": " ".join(str(it.get("what_would_change_my_mind", "")).split())[:300], "action": " ".join(str(it.get("suggested_action", "")).split())[:240],
+                    "falsifier": _plain(it.get("what_would_change_my_mind", ""))[:300], "action": _plain(it.get("suggested_action", ""))[:240],
                     "measured": measured, "articles": len(sources_)})
     return out, dropped
+
+
+def _plain(t):
+    """One line, without the model's references to our internal numbers ("(dev 76)", "[12]"): the evidence list shows the real sources."""
+    t = re.sub(r"\s*[\(\[]\s*(?:dev(?:elopments?)?\.?\s*)?#?\d+(?:\s*[,;&and]+\s*(?:dev\s*)?#?\d+)*\s*[\)\]]", "", str(t or ""))
+    return " ".join(t.split())
 
 
 def _ints(v):
