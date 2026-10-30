@@ -98,7 +98,7 @@ class Running(unittest.TestCase):
     def test_an_unreadable_answer_is_recorded_as_failed_for_that_article_only(self):
         ids = self.add(3); n = [0]
         def fake(**kw):
-            n[0] += 1; return NS(choices=[NS(message=NS(content="no json here"))], usage=NS(prompt_tokens=1, completion_tokens=1)) if n[0] == 1 else reply([item()])
+            n[0] += 1; return NS(choices=[NS(message=NS(content="no json here"))], usage=NS(prompt_tokens=1, completion_tokens=1)) if n[0] <= 2 else reply([item()])   # the first article is unreadable on both tries
         with mock.patch("litellm.completion", side_effect=fake): r = dv.run(ids, workers=1)
         self.assertEqual(r["failed"], 1); self.assertEqual(db.q("SELECT COUNT(*) n FROM development_runs WHERE status LIKE 'failed%'", one=True)["n"], 1)
         self.assertEqual(len(dv.listing()), 2)
@@ -158,3 +158,33 @@ class Api(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Salvage(unittest.TestCase):
+    def setUp(self): h.reset(); self.ds = signals.domains()
+
+    def test_a_reply_cut_off_in_the_middle_keeps_the_complete_developments(self):
+        full = json.dumps({"developments": [item(), item(claim="Second one is fine.")]})
+        got = dv.salvage(full[:full.rindex('"claim"') + 20])           # cut inside the second item
+        self.assertEqual(len(got["developments"]), 1)
+
+    def test_one_broken_item_does_not_lose_the_others(self):
+        raw = '{"developments":[' + json.dumps(item()) + ', {"kind": "capability", "claim": "oops "quoted" badly"}, ' + json.dumps(item(claim="Third.")) + ']}'
+        self.assertEqual([d["claim"] for d in dv.salvage(raw)["developments"]], ["Chunked prefill raises throughput.", "Third."])
+
+    def test_braces_inside_text_do_not_confuse_it(self):
+        raw = '{"developments":[' + json.dumps(item(claim='Supports {braces} and "quotes" in text.')) + ']}'
+        self.assertIn("{braces}", dv.salvage(raw)["developments"][0]["claim"])
+
+    def test_nothing_usable_is_none(self):
+        for raw in ("", "no json", '{"developments":[]}', '{"developments":[{"kind": '): self.assertIsNone(dv.salvage(raw))
+
+    def test_an_empty_reply_is_tried_again_and_a_cut_off_one_is_salvaged(self):
+        h.reset(); db.set_setting("api_key", "sk-test"); s = h.add_source("B"); aid = h.add_article(s, "vLLM", TEXT)
+        a = db.q("SELECT a.*, 'B' source FROM articles a WHERE id=?", (aid,), one=True)
+        full = json.dumps({"developments": [item(), item(claim="Second.")]}); replies = iter(["", full[:-30]])
+        with mock.patch("sw.llm.text", side_effect=lambda *x, **k: next(replies)):
+            out, _ = dv._ask(a, self.ds)
+        self.assertGreaterEqual(len(out), 1)
+        with mock.patch("sw.llm.text", return_value=""):
+            with self.assertRaises(ValueError): dv._ask(a, self.ds)

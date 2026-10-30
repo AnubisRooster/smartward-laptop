@@ -72,8 +72,42 @@ def clean(a, raw, domains):
     return out, dropped
 
 
-def _ask(a, domains):
-    return clean(a, llm.json_from(llm.text([{"role": "user", "content": _prompt(a, domains)}], feature="developments", private=bool(a["private"]))), domains)
+def salvage(raw):
+    """The developments that can be read from a reply that is cut off or has one broken item: each top-level {...} inside the list is parsed on its own."""
+    i = (raw or "").find("[", (raw or "").find("developments") if "developments" in (raw or "") else 0)
+    if i < 0: return None
+    out, depth, start, in_str, esc = [], 0, None, False, False
+    for j in range(i + 1, len(raw)):
+        ch = raw[j]
+        if in_str:
+            if esc: esc = False
+            elif ch == "\\": esc = True
+            elif ch == '"': in_str = False
+            continue
+        if ch == '"': in_str = True
+        elif ch == "{":
+            if depth == 0: start = j
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0 and start is not None:
+                try: out.append(json.loads(raw[start:j + 1]))
+                except ValueError: pass
+                start = None
+        elif ch == "]" and depth == 0: break
+    return {"developments": out} if out else None
+
+
+def _ask(a, domains, tries=2):
+    last = ""
+    for _ in range(tries):                                    # an empty or unreadable reply is worth one more try before giving up on the article
+        raw = llm.text([{"role": "user", "content": _prompt(a, domains)}], feature="developments", private=bool(a["private"])); last = raw
+        data = llm.json_from(raw)
+        try: return clean(a, data, domains)
+        except ValueError:
+            data = salvage(raw)
+            if data: return clean(a, data, domains)
+    raise ValueError(f"model gave no usable developments (it said: {' '.join(last.split())[:140]!r})")
 
 
 def store(a, items, model):
@@ -105,11 +139,13 @@ def sample(n=30, now=None):
     return [r["id"] for r in picked[:n]]
 
 
-def run(ids=None, limit=60, workers=None, retry_failed=False):
+def run(ids=None, limit=60, workers=None, retry_failed=False, redo=False):
     """Read the given articles (or the next `limit` unread ones) for developments. Returns {"done", "paused", "failed"}."""
     if not _run_lock.acquire(blocking=False): return {"done": 0, "paused": False, "failed": 0, "busy": True}
     try:
         ds = signals.domains()
+        if redo and ids:
+            for i in ids: db.x("DELETE FROM developments WHERE article_id=?", (i,)); db.x("DELETE FROM development_runs WHERE article_id=?", (i,))
         if retry_failed: db.x("DELETE FROM development_runs WHERE status LIKE 'failed%'")
         if ids is None: ids = [r["id"] for r in db.q("SELECT a.id FROM articles a WHERE a.relevant=1 AND a.private=0 AND a.id NOT IN (SELECT article_id FROM development_runs) AND length(COALESCE(a.text,a.teaser,''))>500 ORDER BY a.published DESC LIMIT ?", (limit,))]
         rows = [r for r in (db.q("SELECT a.*, s.name source FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id=?", (i,), one=True) for i in ids) if r]
