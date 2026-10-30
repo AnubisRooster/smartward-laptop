@@ -77,7 +77,7 @@ class Cleaning(Setup):
 
     def test_the_models_references_to_internal_numbers_are_removed_from_the_text(self):
         out, _ = self.clean([hyp([self.ids[0]], implication="FedRAMP (dev 107) and 500 orgs (dev 108) show demand [3]. Benchmarks (see 4, 5) may change (about 50%).", suggested_action="Check dev 12 and [7] first.")])
-        self.assertEqual(out[0]["implication"], "FedRAMP and 500 orgs show demand. Benchmarks (see 4, 5) may change (about 50%)."); self.assertEqual(out[0]["action"], "Check and first.")
+        self.assertEqual(out[0]["implication"], "FedRAMP and 500 orgs show demand. Benchmarks (see 4, 5) may change (about 50%)."); self.assertEqual(out[0]["action"], "Check dev 12 and first.")
         self.assertNotIn("dev 107", out[0]["implication"]); self.assertNotIn("[3]", out[0]["implication"])
 
     def test_a_reply_of_the_wrong_shape_is_an_error(self):
