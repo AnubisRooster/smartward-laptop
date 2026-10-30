@@ -43,6 +43,15 @@ class Cleaning(unittest.TestCase):
         out, _ = dv.clean(article(), [item()], self.ds); self.assertEqual(len(out), 1)
         out, _ = dv.clean(article(), {"items": [item()]}, self.ds); self.assertEqual(len(out), 1)
 
+    def test_a_domain_the_model_guessed_without_its_words_appearing_is_dropped(self):
+        out, _ = self.clean([item(domains=["Local & CPU inference"], claim="A two-player game syncs phones with audio chirps.", subject="Chirp Pong", quote="measured 2.1x higher throughput than vLLM 0.9 on the ShareGPT workload")])
+        self.assertEqual(out[0]["domains"], [])
+
+    def test_retagging_applies_the_current_keywords_to_what_is_already_stored(self):
+        s = h.add_source("B"); aid = h.add_article(s, "Game on a phone", TEXT)
+        db.x("INSERT INTO developments(article_id,kind,claim,subject,quote,evidence,grounded,domains,ts,created,model) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (aid, "capability", "A game syncs phones by sound.", "Chirp", "q", "claimed", 1, json.dumps(["Local & CPU inference", "Enterprise AI"]), 1.0, 1.0, "m"))
+        self.assertEqual(dv.retag(), 1); self.assertEqual(json.loads(db.q("SELECT domains FROM developments", one=True)["domains"]), []); self.assertEqual(dv.retag(), 0)
+
     def test_tagging_every_domain_keeps_only_the_two_whose_words_appear(self):
         names = [d["name"] for d in self.ds]
         out, _ = self.clean([item(domains=names, claim="Chunked prefill raises serving throughput.", quote="measured 2.1x higher throughput than vLLM 0.9 on the ShareGPT workload")])

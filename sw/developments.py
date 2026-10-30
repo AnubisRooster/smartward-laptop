@@ -26,6 +26,25 @@ def grounded(quote, body):
     return sum(g in body for g in grams) / len(grams) >= 0.75
 
 
+def verify_domains(proposed, text, domains):
+    """A domain stays only when its own words appear in what the development is about, at most two. Models like to tag everything; the keywords are yours."""
+    low = text.lower(); out = []
+    for d in proposed:
+        kws = next((x["keywords"] for x in domains if x["name"] == d), [])
+        rx = signals.keyword_regex(kws)
+        if rx and rx.search(low): out.append(d)
+    return out[:2]
+
+
+def retag():
+    """Re-check the domains already stored against the current keywords (no model needed). Returns how many developments changed."""
+    ds = signals.domains(); changed = 0
+    for r in db.q("SELECT d.id,d.domains,d.claim,d.subject,d.quote,a.title FROM developments d JOIN articles a ON a.id=d.article_id"):
+        before = json.loads(r["domains"] or "[]"); after = verify_domains(before, f"{r['claim']} {r['subject']} {r['quote']} {r['title']}", ds)
+        if after != before: db.x("UPDATE developments SET domains=? WHERE id=?", (json.dumps(after), r["id"])); changed += 1
+    return changed
+
+
 def _prompt(a, domains):
     names = "; ".join(d["name"] for d in domains)
     text = (a["text"] or a["teaser"] or "")[:5000]
@@ -63,10 +82,7 @@ def clean(a, raw, domains):
         quote = " ".join(str(it.get("quote", "")).split())[:200]
         is_grounded = grounded(quote, body)                                                  # the model must point at words that are really there
         doms = [known[str(d).strip().lower()] for d in (it.get("domains") or []) if str(d).strip().lower() in known]
-        if len(doms) > 2:                                                                    # tagging everything is tagging nothing: keep the ones whose own words appear
-            text = (claim + " " + it.get("subject", "") + " " + quote + " " + (a["title"] or "")).lower()
-            hit = [d for d in doms if (lambda rx: rx and rx.search(text))(signals.keyword_regex(next(x["keywords"] for x in domains if x["name"] == d)))]
-            doms = hit[:2]
+        doms = verify_domains(doms, claim + " " + str(it.get("subject", "")) + " " + quote + " " + (a["title"] or ""), domains)
         out.append({"kind": kind, "subject": " ".join(str(it.get("subject", "")).split())[:100], "claim": claim, "metric": metric, "value": value, "baseline": baseline,
                     "evidence": evidence if is_grounded else "anecdotal", "claimed_evidence": evidence, "domains": doms, "quote": quote, "grounded": is_grounded})
     return out, dropped

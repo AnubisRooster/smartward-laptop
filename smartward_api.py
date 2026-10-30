@@ -349,6 +349,9 @@ def developments_run(body: dict):
     bg(developments.run, ids, int(body.get("limit", 60)), None, bool(body.get("retry_failed")), bool(body.get("redo")))
     return {"started": True, "articles": len(ids) if ids is not None else None}
 
+@app.post("/api/developments/retag")
+def developments_retag(): return {"changed": developments.retag()}
+
 @app.get("/api/developments/status")
 def developments_status():
     return {**developments.STATE, "read": db.q("SELECT COUNT(*) n FROM development_runs WHERE status='ok'", one=True)["n"], "developments": db.q("SELECT COUNT(*) n FROM developments", one=True)["n"]}
