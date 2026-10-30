@@ -378,6 +378,9 @@ def implications_status():
     except ValueError: last = None
     return {"running": implications.STATE["running"], "last": last}
 
+@app.post("/api/implications/recap")
+def implications_recap(): return {"lowered": implications.recap()}
+
 @app.get("/api/projects/{pid}/implications")
 def implications_list(pid: int, status: Optional[str] = None): return implications.listing(pid, status)
 

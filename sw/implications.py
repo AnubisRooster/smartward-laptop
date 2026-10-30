@@ -24,7 +24,7 @@ def project_domains(project, domains):
 def gather(project, now=None):
     """The evidence the model will see: grounded developments in the project's domains, strongest first, and the trend picture."""
     now = now or db.now(); ds = project_domains(project, signals.domains()); names = {d["name"] for d in ds}
-    rows = db.q("SELECT d.*, a.title, s.name source FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id "
+    rows = db.q("SELECT d.*, a.title, a.url, s.name source FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id "
                 "WHERE d.grounded=1 AND d.ts>? ORDER BY d.ts DESC LIMIT 600", (now - EVIDENCE_DAYS * 86400,))
     rank = {"measured": 0, "claimed": 1, "anecdotal": 2}; pool = []
     for r in rows:
@@ -76,7 +76,7 @@ def clean(raw, evidence):
         direction = str(it.get("direction", "")).strip().lower(); direction = direction if direction in DIRECTIONS else "neutral"
         conf = str(it.get("confidence", "")).strip().lower(); conf = conf if conf in CONFIDENCE else "low"
         measured = sum(1 for i in ids if by_id[i]["evidence"] == "measured"); sources_ = {by_id[i]["article_id"] for i in ids}
-        cap = "high" if measured >= 2 and len(sources_) >= 2 else "medium" if measured >= 1 or len(sources_) >= 2 else "low"
+        cap = cap_for(measured, len(sources_), {_cls(by_id[i]) for i in ids})
         if CONFIDENCE.index(conf) > CONFIDENCE.index(cap): conf = cap
         if STRONG.search(head + " " + imp) and conf != "low" and measured < 2: conf = "low" if conf == "medium" else "medium"
         out.append({"headline": head, "implication": imp, "direction": direction, "confidence": conf, "evidence": ids, "counter": counter,
@@ -89,6 +89,30 @@ def _plain(t):
     """One line, without the model's references to our internal numbers ("(dev 76)", "[12]"): the evidence list shows the real sources."""
     t = re.sub(r"\s*[\(\[]\s*(?:dev(?:elopments?)?\.?\s*)?#?\d+(?:\s*[,;&and]+\s*(?:dev\s*)?#?\d+)*\s*[\)\]]", "", str(t or ""))
     return " ".join(t.split())
+
+
+def _cls(r): return signals.source_class("", r.get("source", ""), r.get("url", ""))
+
+
+def cap_for(measured, articles, classes):
+    """The most confidence the evidence can carry. "Measured" here means a number from the authors' own tests: several papers agreeing is good but not
+    independent confirmation, so papers alone never reach "high"; that needs a release, a lab announcement or commentary alongside them."""
+    cap = "high" if measured >= 2 and articles >= 2 else "medium" if measured >= 1 or articles >= 2 else "low"
+    if cap == "high" and classes <= {"paper"}: cap = "medium"
+    return cap
+
+
+def recap():
+    """Apply the current confidence rules to hypotheses already stored. Returns how many were lowered."""
+    lowered = 0
+    for h in db.q("SELECT id,confidence,evidence FROM hypotheses WHERE confidence!='low'"):
+        ids = json.loads(h["evidence"] or "[]")
+        if not ids: continue
+        rows = db.q(f"SELECT d.id,d.evidence,d.article_id,a.url,s.name source FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id WHERE d.id IN ({','.join('?' * len(ids))})", ids)
+        if not rows: continue
+        cap = cap_for(sum(1 for r in rows if r["evidence"] == "measured"), len({r["article_id"] for r in rows}), {_cls(r) for r in rows})
+        if CONFIDENCE.index(h["confidence"]) > CONFIDENCE.index(cap): db.x("UPDATE hypotheses SET confidence=? WHERE id=?", (cap, h["id"])); lowered += 1
+    return lowered
 
 
 def _ints(v):

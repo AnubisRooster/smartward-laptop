@@ -64,6 +64,16 @@ class Cleaning(Setup):
         self.assertEqual(self.clean([hyp(two_measured, confidence="high")])[0][0]["confidence"], "high")                         # two measured results from different articles
         self.assertEqual(self.clean([hyp(two_measured[:1], confidence="high")])[0][0]["confidence"], "medium")                   # one measured result
 
+    def test_papers_alone_never_reach_high_confidence_but_a_release_alongside_them_can(self):
+        self.assertEqual(im.cap_for(5, 3, {"paper"}), "medium"); self.assertEqual(im.cap_for(5, 3, {"paper", "release"}), "high"); self.assertEqual(im.cap_for(5, 3, {"lab"}), "high")
+        self.assertEqual(im.cap_for(1, 1, {"paper"}), "medium"); self.assertEqual(im.cap_for(0, 1, {"blog"}), "low")
+
+    def test_stored_hypotheses_can_be_re_capped_with_the_current_rules(self):
+        arx = h.add_source("arXiv: x", kind="arxiv"); a1, a2 = h.add_article(arx, "P1", "x" * 600), h.add_article(arx, "P2", "x" * 600)
+        d1, d2 = dev(a1), dev(a2)
+        db.x("INSERT INTO hypotheses(project_id,headline,implication,direction,confidence,evidence,counter,status,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?)", (self.pid, "H", "I", "enables", "high", json.dumps([d1, d2]), "[]", "new", NOW, NOW))
+        self.assertEqual(im.recap(), 1); self.assertEqual(db.q("SELECT confidence FROM hypotheses", one=True)["confidence"], "medium"); self.assertEqual(im.recap(), 0)
+
     def test_over_strong_wording_lowers_confidence(self):
         ev = {r["id"]: r for r in self.ev()}; one = [i for i, r in ev.items() if r["evidence"] == "measured"][:1]
         self.assertEqual(self.clean([hyp(one, headline="This will make your benchmark obsolete", confidence="medium")])[0][0]["confidence"], "low")
