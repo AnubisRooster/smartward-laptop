@@ -23,13 +23,13 @@ export default function RemoteSignIn({ onDone }: { onDone: () => void }) {
 }
 
 /** What "Settings" is on a phone: settings are changed on the laptop; here you sign out and pick light or dark. */
-export function PhoneAccount() {
+export function PhoneAccount({ embedded = false }: { embedded?: boolean }) {
   const [theme, setTheme] = useState<ThemePref>(readPref());
   return (
-    <div className="h-full overflow-y-auto"><div className="mx-auto max-w-md space-y-4 p-5">
+    <div className={embedded ? '' : 'h-full overflow-y-auto'}><div className="mx-auto max-w-2xl space-y-4 p-5">
       <h1 className="text-lg font-semibold">This phone</h1>
       <div className="flex items-center justify-between text-sm"><span>Theme</span><Seg value={theme} onChange={(x: string) => { setTheme(x as ThemePref); setPref(x as ThemePref); }} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} /></div>
-      <p className="text-sm text-zinc-500">Settings, backups and exports are only available on the laptop itself, so nothing here can change or copy your library.</p>
+      <p className="text-sm text-zinc-500">Keys, the app lock, sources, backups and exports are only available on the laptop itself, so nothing here can copy your library or send it elsewhere.</p>
       <Btn kind="danger" onClick={async () => { try { await post('/remote/logout'); } catch { /* already signed out */ } location.reload(); }}>Sign out of this phone</Btn>
     </div></div>
   );

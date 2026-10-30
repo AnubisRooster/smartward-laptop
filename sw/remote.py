@@ -25,7 +25,23 @@ ALLOW = [
     _R("POST", r"/api/conversations"), _R("POST", r"/api/conversations/\d+/(send|cancel)"), _R("DELETE", r"/api/conversations/\d+"),
     _R("POST", r"/api/approvals/[0-9a-f]+"), _R("POST", r"/api/projects/\d+/items"), _R("GET", r"/api/projects/\d+/implications"), _R("POST", r"/api/implications/\d+/(accept|dismiss)"), _R("PATCH", r"/api/items/\d+"),
     _R("POST", r"/api/remote/logout"),
+    _R("GET", r"/api/(usage|models|openrouter/models)"), _R("POST", r"/api/models/test"), _R("PUT", r"/api/settings"),     # the phone's Settings: only the keys below
 ]
+
+# What a phone may change in Settings: the model, the budget and the voice. Never keys, addresses, the lock, sources or remote access itself:
+# a phone session that could change the API key or a server address could redirect your data elsewhere.
+PHONE_SETTINGS = {"model", "cloud_scope", "analysis_model", "daily_budget", "tts_engine", "tts_voice", "tts_profile", "tts_profiles", "voice_rate", "voice_name"}
+PHONE_MODEL_PREFIXES = ("ollama_chat/", "openrouter/")
+
+
+def phone_settings_refusal(values):
+    """None when a phone may save these settings, else a plain reason."""
+    other = sorted(k for k in values if k not in PHONE_SETTINGS)
+    if other: return "These can only be changed on the laptop: " + ", ".join(other) + "."
+    for k in ("model", "analysis_model"):
+        v = values.get(k)
+        if v not in (None, "") and not (isinstance(v, str) and v.startswith(PHONE_MODEL_PREFIXES)): return "From a phone, pick a local (Ollama) or OpenRouter model."
+    return None
 PUBLIC = [_R("POST", r"/api/remote/login"), _R("GET", r"/api/remote/session")]
 
 _lock = threading.Lock()

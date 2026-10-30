@@ -68,7 +68,10 @@ def get_settings(): return db.all_settings()
 class SettingsIn(BaseModel):
     values: dict
 @app.put("/api/settings")
-def put_settings(s: SettingsIn):
+def put_settings(s: SettingsIn, request: Request):
+    if remote.is_remote(request.headers):
+        why = remote.phone_settings_refusal(s.values)
+        if why: bad(why, 403)
     for k, v in s.values.items():
         if k in ("lock_hash",) or k.startswith("remote_"): continue
         if k.startswith("tts_") or k == "voice_rate":

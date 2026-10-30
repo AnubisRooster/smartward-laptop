@@ -8,7 +8,7 @@ import Boundary from './Boundary';
 import Palette from './Palette';
 import Links from './Links';
 import { onPhone } from './device';
-import RemoteSignIn, { PhoneAccount } from './RemoteSignIn';
+import RemoteSignIn from './RemoteSignIn';
 import { HelpHost } from './HelpGuide';
 import { idleFor, shouldLock, watchActivity } from './activity';
 import { TrendingUp, Sun, Newspaper, Share2, MessageSquare, FolderKanban, Settings as SettingsIcon, Lock, Rss, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
@@ -19,6 +19,7 @@ const Radar = lazy(() => import('./views/Radar'));
 const Chat = lazy(() => import('./views/Chat'));
 const Projects = lazy(() => import('./views/Projects'));
 const Settings = lazy(() => import('./views/Settings'));
+const PhoneSettings = lazy(() => import('./views/Settings').then(m => ({ default: m.PhoneSettings })));
 import Onboarding from './views/Onboarding';
 import { onDesktopEvent } from './desktop';
 
@@ -103,7 +104,7 @@ export default function App() {
 
   const p = st.pipeline;
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const Body = { today: Today, reading: Reading, radar: Radar, graph: GraphView, chat: Chat, projects: Projects, settings: onPhone ? PhoneAccount : Settings }[tab];
+  const Body = { today: Today, reading: Reading, radar: Radar, graph: GraphView, chat: Chat, projects: Projects, settings: onPhone ? PhoneSettings : Settings }[tab];
   const navBtn = (active: boolean, label: string, Icon: typeof Sun, onClick: () => void, extra?: string) => (
     <button key={label} onClick={onClick} aria-current={active ? 'page' : undefined} title={rail ? label : undefined} aria-label={rail ? label : undefined}
       className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] md:flex-none md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm', rail && 'md:justify-center md:px-0', active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200', extra)}>

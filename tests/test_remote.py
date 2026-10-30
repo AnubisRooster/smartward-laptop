@@ -70,10 +70,10 @@ class TheFrontDoor(unittest.TestCase):
         turn_on(); sign_in()
         for path in ("/api/status", "/api/articles", "/api/digest", "/api/conversations", "/api/projects", "/api/search?q=x"):
             self.assertEqual(c.get(path, headers=VIA).status_code, 200, path)
-        for method, path in (("put", "/api/settings"), ("post", "/api/backup"), ("post", "/api/restore"), ("get", "/api/export/json"), ("get", "/api/export/markdown"),
+        for method, path in (("post", "/api/backup"), ("post", "/api/restore"), ("get", "/api/export/json"), ("get", "/api/export/markdown"),
                              ("post", "/api/danger/erase"), ("post", "/api/lock/set"), ("get", "/api/dev/info"), ("post", "/api/voice/start"), ("get", "/api/voice/poll"),
                              ("post", "/api/sources"), ("delete", "/api/sources/1"), ("put", "/api/remote/config"), ("get", "/api/remote/status"), ("post", "/api/remote/revoke"),
-                             ("post", "/api/events/poll"), ("post", "/api/models/test")):
+                             ("post", "/api/events/poll")):
             r = getattr(c, method)(path, headers=VIA, **({"json": {}} if method in ("put", "post") else {})); self.assertEqual(r.status_code, 403, f"{method} {path}")
 
     def test_only_the_allowed_tailscale_account_gets_in(self):
@@ -122,3 +122,28 @@ class Pieces(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PhoneSettings(unittest.TestCase):
+    def setUp(self): h.reset(); remote.clear_failures(); VIA.pop("Cookie", None); turn_on(); sign_in()
+
+    def put(self, values): return c.put("/api/settings", json={"values": values}, headers=VIA)
+
+    def test_a_phone_can_change_the_model_the_budget_and_the_voice(self):
+        r = self.put({"model": "openrouter/poolside/laguna-s-2.1:free", "daily_budget": 2.5, "cloud_scope": "chat", "voice_rate": 1.1, "tts_engine": "browser"}); self.assertEqual(r.status_code, 200, r.text)
+        s = c.get("/api/settings").json(); self.assertEqual((s["model"], s["daily_budget"], s["cloud_scope"]), ("openrouter/poolside/laguna-s-2.1:free", 2.5, "chat"))
+        for path in ("/api/usage", "/api/models"): self.assertEqual(c.get(path, headers=VIA).status_code, 200, path)
+
+    def test_keys_addresses_and_the_lock_stay_laptop_only(self):
+        for values in ({"api_key": "sk-evil"}, {"ollama_base": "http://evil.example.com"}, {"tts_url": "http://evil.example.com"}, {"github_token": "x"}, {"lock_after": 0},
+                       {"interests": "x"}, {"model": "openrouter/x", "api_key": "sk-evil"}, {"remote_login": "evil@example.com"}):
+            r = self.put(values); self.assertEqual(r.status_code, 403, values); self.assertIn("laptop", r.json()["detail"])
+        self.assertNotEqual(h.db.get_setting("api_key"), "sk-evil"); self.assertNotEqual(h.db.get_setting("ollama_base"), "http://evil.example.com")
+
+    def test_a_phone_can_only_pick_local_or_openrouter_models(self):
+        for bad in ("hosted_vllm/http://evil", "openai/gpt-4o", 123):
+            self.assertEqual(self.put({"model": bad}).status_code, 403, bad)
+        self.assertEqual(self.put({"model": "ollama_chat/llama3.2:3b"}).status_code, 200)
+
+    def test_the_laptop_itself_is_not_limited(self):
+        self.assertEqual(c.put("/api/settings", json={"values": {"interests": "kv cache"}}).status_code, 200)
