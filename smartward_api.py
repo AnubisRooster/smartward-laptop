@@ -740,7 +740,7 @@ def _scheduler():
 def _close_microphone(): stt.stop(); stt.stop_worker(); awake.release()
 
 @app.on_event("startup")
-def _start(): bg(_scheduler); awake.sync()
+def _start(): chat.recover(); bg(_scheduler); awake.sync()      # answers cut off by a restart are released first
 
 _UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 if os.path.isdir(_UI): app.mount("/", StaticFiles(directory=_UI, html=True), name="ui")

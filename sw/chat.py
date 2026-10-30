@@ -105,9 +105,25 @@ def project_state(pid):
 
 _cancelled = set()
 
+def recover(conv_id=None):
+    """Conversations marked as answering with nothing actually answering them (SmartWard was restarted mid-answer) go back to idle,
+    and the half-written reply is kept and marked as interrupted. Returns how many were recovered."""
+    rows = db.q("SELECT id FROM conversations WHERE status='running'" + (" AND id=?" if conv_id else ""), (conv_id,) if conv_id else ())
+    n = 0
+    for r in rows:
+        if r["id"] in _running: continue                      # a real answer is still being written
+        for m in db.q("SELECT id,content,meta FROM messages WHERE conv_id=? AND role='assistant'", (r["id"],)):
+            meta = json.loads(m["meta"] or "{}")
+            if meta.get("streaming"):
+                meta.pop("streaming", None); meta["interrupted"] = True
+                db.x("UPDATE messages SET content=?, meta=? WHERE id=?", ((m["content"] or "").rstrip() + ("\n\n" if m["content"] else "") + "(interrupted: SmartWard restarted while this was being written)", json.dumps(meta), m["id"]))
+        db.x("UPDATE conversations SET status='idle', updated=? WHERE id=?", (db.now(), r["id"])); n += 1
+    return n
+
 def cancel(conv_id):
-    """Stop the answer being written (what it has so far is kept). Returns False when nothing is running."""
-    if conv_id not in _running: return False
+    """Stop the answer being written (what it has so far is kept). A conversation left 'answering' by a restart is simply released.
+    Returns False when nothing was running."""
+    if conv_id not in _running: return recover(conv_id) > 0
     _cancelled.add(conv_id)
     for r in db.q("SELECT id FROM approvals WHERE conv_id=? AND status='pending'", (conv_id,)): decide(r["id"], False)   # don't wait on a card
     return True

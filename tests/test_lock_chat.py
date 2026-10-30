@@ -139,3 +139,30 @@ class CancelTests(unittest.TestCase):
         self.assertEqual(last["content"], "Part one. ")
         self.assertTrue(last["meta"]["cancelled"])
         self.assertNotIn(cid, chat._cancelled)
+
+
+class StuckAfterRestart(unittest.TestCase):
+    """SmartWard restarted while the strategist was answering: the conversation stayed 'running' with nothing behind it, and Stop did nothing."""
+    def setUp(self):
+        h.reset(); from sw import chat as ch; self.ch = ch
+        self.cid = ch.new_conversation("brainstorm")
+        db = h.db
+        db.x("UPDATE conversations SET status='running' WHERE id=?", (self.cid,))
+        db.x("INSERT INTO messages(conv_id,role,content,meta,ts) VALUES(?,?,?,?,?)", (self.cid, "user", "hi", "{}", 1.0))
+        self.mid = db.x("INSERT INTO messages(conv_id,role,content,meta,ts) VALUES(?,?,?,?,?)", (self.cid, "assistant", "Half an ans", '{"streaming": true}', 2.0))
+
+    def test_stop_releases_a_conversation_that_nothing_is_answering(self):
+        r = h.client.post(f"/api/conversations/{self.cid}/cancel").json(); self.assertTrue(r["ok"])
+        c = h.client.get(f"/api/conversations/{self.cid}").json(); self.assertEqual(c["status"], "idle")
+        last = c["messages"][-1]; self.assertNotIn("streaming", last["meta"]); self.assertTrue(last["meta"]["interrupted"]); self.assertTrue(last["content"].startswith("Half an ans"))
+
+    def test_startup_releases_every_such_conversation_and_the_chat_can_be_used_again(self):
+        self.assertEqual(self.ch.recover(), 1); self.assertEqual(self.ch.recover(), 0)
+        from unittest import mock
+        with mock.patch.object(self.ch.threading, "Thread"): self.assertEqual(h.client.post(f"/api/conversations/{self.cid}/send", json={"text": "again"}).status_code, 200)
+        self.ch._running.discard(self.cid)                       # no thread was started here, so nothing will clear it
+
+    def test_a_conversation_really_being_answered_is_left_alone(self):
+        self.ch._running.add(self.cid)
+        try: self.assertEqual(self.ch.recover(), 0); self.assertEqual(h.db.q("SELECT status FROM conversations WHERE id=?", (self.cid,), one=True)["status"], "running")
+        finally: self.ch._running.discard(self.cid)
