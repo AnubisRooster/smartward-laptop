@@ -89,3 +89,21 @@ class TestsNeverTouchARealLibrary(unittest.TestCase):
 class UiBuildTests(unittest.TestCase):
     def test_status_carries_a_build_number_so_an_open_window_can_offer_to_reload(self):
         h.reset(); self.assertIsInstance(h.client.get("/api/status").json()["ui_build"], int)
+
+
+class ClientLogTests(unittest.TestCase):
+    def test_a_page_error_is_written_down_briefly_and_the_rate_is_limited(self):
+        import os, tempfile
+        h.reset(); home = tempfile.mkdtemp(); old = os.environ.get("HOME"); os.environ["HOME"] = home
+        try:
+            h.api._clientlog.update(n=0, t=0.0)
+            r = h.client.post("/api/clientlog", json={"where": "page", "page": "#/settings", "message": "boom " * 500, "stack": "a / b", "agent": "WebKit"}); self.assertTrue(r.json()["ok"])
+            text = open(os.path.join(home, ".local", "state", "smartward", "client.log")).read(); self.assertIn("#/settings", text); self.assertLess(len(text), 2000)
+            results = [h.client.post("/api/clientlog", json={"where": "x"}).json()["ok"] for _ in range(40)]; self.assertIn(False, results)
+        finally:
+            if old is None: os.environ.pop("HOME", None)
+            else: os.environ["HOME"] = old
+
+    def test_a_phone_cannot_write_to_the_log(self):
+        from tests.test_remote import VIA, turn_on, sign_in
+        h.reset(); turn_on(); sign_in(); self.assertEqual(h.client.post("/api/clientlog", json={"where": "x"}, headers=VIA).status_code, 403)

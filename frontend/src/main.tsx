@@ -4,8 +4,10 @@ import App from "./App";
 import "./App.css";
 import { initTheme } from "./theme";
 import { reloadOnce } from "./chunkError";
+import { watchErrors } from "./clientLog";
 
 initTheme();
+watchErrors();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<React.StrictMode><App /></React.StrictMode>);
 

@@ -1,11 +1,12 @@
 import { Component, ReactNode } from 'react';
 import { isChunkError, reloadOnce } from './chunkError';
+import { reportError } from './clientLog';
 
 /** If a page fails to load or crashes, the rest of the app (menu, banners) stays, with a way out: reload, or go somewhere else. */
 export default class Boundary extends Component<{ children: ReactNode; resetKey: string }, { error: unknown }> {
   state = { error: null as unknown };
   static getDerivedStateFromError(error: unknown) { return { error }; }
-  componentDidCatch(error: unknown) { if (isChunkError(error)) reloadOnce(); }                     // an old window after an update fixes itself
+  componentDidCatch(error: unknown) { reportError('page', error); if (isChunkError(error)) reloadOnce(); }                     // an old window after an update fixes itself
   componentDidUpdate(prev: { resetKey: string }) { if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null }); }   // moving to another page tries again
   render() {
     if (!this.state.error) return this.props.children;

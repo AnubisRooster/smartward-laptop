@@ -395,6 +395,23 @@ def implications_dismiss(hid: int, body: dict):
     except LookupError as e: bad(str(e), 404)
     return {"ok": True}
 
+# ---------- what the page itself reports when something breaks (for diagnosing a window nobody can see into) ----------
+_clientlog = {"n": 0, "t": 0.0}
+@app.post("/api/clientlog")
+def clientlog(body: dict):
+    """The page tells us about its own errors. Local only (not on the phone allow-list), small, rate-limited, written to ~/.local/state/smartward/client.log."""
+    now = time.time()
+    if now - _clientlog["t"] > 60: _clientlog.update(n=0, t=now)
+    _clientlog["n"] += 1
+    if _clientlog["n"] > 30: return {"ok": False}
+    line = " | ".join(" ".join(str(body.get(k, ""))[:600].split()) for k in ("where", "page", "message", "stack", "agent"))
+    try:
+        d = os.path.join(os.path.expanduser("~"), ".local", "state", "smartward"); os.makedirs(d, exist_ok=True); f = os.path.join(d, "client.log")
+        if os.path.exists(f) and os.path.getsize(f) > 200_000: os.replace(f, f + ".1")
+        with open(f, "a") as fh: fh.write(time.strftime("%Y-%m-%d %H:%M:%S ") + line[:1800] + "\n")
+    except OSError: pass
+    return {"ok": True}
+
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)
 
