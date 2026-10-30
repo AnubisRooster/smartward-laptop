@@ -37,10 +37,10 @@ def verify_domains(proposed, text, domains):
 
 
 def retag():
-    """Re-check the domains already stored against the current keywords (no model needed). Returns how many developments changed."""
+    """Re-check the domains already stored against the current keywords (no model needed): a domain can only be removed, never added. Returns how many changed."""
     ds = signals.domains(); changed = 0
-    for r in db.q("SELECT d.id,d.domains,d.claim,d.subject,d.quote,a.title FROM developments d JOIN articles a ON a.id=d.article_id"):
-        before = json.loads(r["domains"] or "[]"); after = verify_domains(before, f"{r['claim']} {r['subject']} {r['quote']} {r['title']}", ds)
+    for r in db.q("SELECT d.id,d.domains,d.claim,d.subject,d.quote,a.title,a.teaser FROM developments d JOIN articles a ON a.id=d.article_id"):
+        before = json.loads(r["domains"] or "[]"); after = verify_domains(before, f"{r['claim']} {r['subject']} {r['quote']} {r['title']} {(r['teaser'] or '')[:1500]}", ds)
         if after != before: db.x("UPDATE developments SET domains=? WHERE id=?", (json.dumps(after), r["id"])); changed += 1
     return changed
 
@@ -82,7 +82,7 @@ def clean(a, raw, domains):
         quote = " ".join(str(it.get("quote", "")).split())[:200]
         is_grounded = grounded(quote, body)                                                  # the model must point at words that are really there
         doms = [known[str(d).strip().lower()] for d in (it.get("domains") or []) if str(d).strip().lower() in known]
-        doms = verify_domains(doms, claim + " " + str(it.get("subject", "")) + " " + quote + " " + (a["title"] or ""), domains)
+        doms = verify_domains(doms, claim + " " + str(it.get("subject", "")) + " " + quote + " " + (a["title"] or "") + " " + (a["teaser"] or "")[:1500], domains)
         out.append({"kind": kind, "subject": " ".join(str(it.get("subject", "")).split())[:100], "claim": claim, "metric": metric, "value": value, "baseline": baseline,
                     "evidence": evidence if is_grounded else "anecdotal", "claimed_evidence": evidence, "domains": doms, "quote": quote, "grounded": is_grounded})
     return out, dropped
