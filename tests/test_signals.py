@@ -190,3 +190,11 @@ class SameThingDifferentSpelling(unittest.TestCase):
         r = signals.analyse({"name": "T", "keywords": []}, NOW); top = {x["name"]: x for x in r["top"]}
         self.assertEqual(len([n for n in top if signals.canon(n) == "kv cache"]), 1); self.assertEqual(sum(x["recent"] for n, x in top.items() if signals.canon(n) == "kv cache"), 3)
         self.assertFalse([n for n in top if signals.canon(n) == "large language model"])
+
+
+class WhatItIs(unittest.TestCase):
+    def test_a_paper_is_a_paper_whichever_source_it_was_filed_under(self):
+        self.assertEqual(signals.source_class("hn", "Enterprise AI", "https://arxiv.org/abs/2610.1"), "paper")
+        self.assertEqual(signals.source_class("rss", "AI Alignment", "https://huggingface.co/papers/2610.2"), "paper")
+        self.assertEqual(signals.source_class("rss", "Hugging Face blog", "https://huggingface.co/blog/x"), "lab")
+        self.assertEqual(signals.source_class("rss", "Some blog", "https://example.com/a"), "blog")

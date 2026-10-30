@@ -55,9 +55,9 @@ def canon(name):
 
 
 
-def source_class(kind, name=""):
-    n = (name or "").lower()
-    if kind in ("arxiv", "hf_papers"): return "paper"
+def source_class(kind, name="", url=""):
+    n = (name or "").lower(); u = (url or "").lower()
+    if kind in ("arxiv", "hf_papers") or re.match(r"https?://(www\.)?arxiv\.org/", u) or u.startswith("https://huggingface.co/papers/"): return "paper"      # what it is, whichever source it was filed under
     if kind == "github": return "release"
     if kind == "rss" and any(l in n for l in LABS): return "lab"
     return "blog"
@@ -104,9 +104,9 @@ def load(now):
     """Everything needed, once: articles (with source), which themes each mentions, and theme names."""
     lo, hi = now - 400 * DAY, now + DAY           # a few feeds carry impossible dates
     arts = {a["id"]: a for a in db.q(
-        "SELECT a.id,a.title,a.teaser,a.published,a.source_id,a.graph_done,a.relevance,s.kind skind,s.name sname FROM articles a JOIN sources s ON s.id=a.source_id "
+        "SELECT a.id,a.title,a.teaser,a.url,a.published,a.source_id,a.graph_done,a.relevance,s.kind skind,s.name sname FROM articles a JOIN sources s ON s.id=a.source_id "
         "WHERE a.published BETWEEN ? AND ?", (lo, hi))}
-    for a in arts.values(): a["cls"] = source_class(a["skind"], a["sname"]); a["text"] = ((a["title"] or "") + " " + (a["teaser"] or "")).lower()
+    for a in arts.values(): a["cls"] = source_class(a["skind"], a["sname"], a["url"]); a["text"] = ((a["title"] or "") + " " + (a["teaser"] or "")).lower()
     themes = {t["id"]: t for t in db.q("SELECT id,name,type FROM themes")}
     mentions = [m for m in db.q("SELECT article_id,theme_id FROM mentions WHERE source_kind='article'") if m["article_id"] in arts and m["theme_id"] in themes]
     uses = defaultdict(int)
