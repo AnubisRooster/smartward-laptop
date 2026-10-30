@@ -107,3 +107,16 @@ class ClientLogTests(unittest.TestCase):
     def test_a_phone_cannot_write_to_the_log(self):
         from tests.test_remote import VIA, turn_on, sign_in
         h.reset(); turn_on(); sign_in(); self.assertEqual(h.client.post("/api/clientlog", json={"where": "x"}, headers=VIA).status_code, 403)
+
+
+class CachingTests(unittest.TestCase):
+    """The app window keeps a web cache on disk. Without these headers it kept serving an old copy of the page that pointed at files a rebuild had removed."""
+    def test_the_page_is_always_rechecked_and_hashed_files_are_kept(self):
+        import glob, os
+        ui = os.path.join(os.path.dirname(h.api.__file__), "ui")
+        if not os.path.isdir(ui): self.skipTest("the UI isn't built")
+        self.assertEqual(h.client.get("/").headers.get("cache-control"), "no-cache")
+        self.assertEqual(h.client.get("/sw.js").headers.get("cache-control"), "no-cache")
+        asset = os.path.basename(sorted(glob.glob(os.path.join(ui, "assets", "*.js")))[0])
+        self.assertIn("immutable", h.client.get(f"/assets/{asset}").headers.get("cache-control"))
+        self.assertNotIn("cache-control", {k.lower() for k in h.client.get("/api/status").headers})       # the laptop's own API answers are left alone

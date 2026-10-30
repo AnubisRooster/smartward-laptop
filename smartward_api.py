@@ -19,7 +19,13 @@ async def front_door(request: Request, call_next):
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": refusal[1], "remote_auth": refusal[0] == 401}, status_code=refusal[0], headers={"Cache-Control": "no-store"})
     resp = await call_next(request)
-    if remote.is_remote(request.headers) and request.url.path.startswith("/api/"): resp.headers["Cache-Control"] = "no-store"
+    path = request.url.path
+    if path.startswith("/api/"):
+        if remote.is_remote(request.headers): resp.headers["Cache-Control"] = "no-store"
+    elif path.startswith("/assets/"):
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"      # file names carry a content hash: a new build gets new names
+    else:
+        resp.headers["Cache-Control"] = "no-cache"                                 # the page itself, the service worker, icons: always check for a newer one
     return resp
 
 def bad(msg, code=400): raise HTTPException(code, msg)
