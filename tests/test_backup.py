@@ -57,13 +57,26 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(c.get("/api/settings").json()["interests"], "inference")
 
     def test_the_token_and_lock_are_not_in_a_backup(self):
+        h.db.set_setting("api_key", "sk-or-secret"); h.db.set_setting("remote_hash", "salt:hash"); h.db.set_setting("remote_sessions", {"abc": {"created": 1, "last": 1}}); h.db.set_setting("remote_enabled", True)
         blob = c.post("/api/backup", json={"passphrase": "correct horse"}).content
         from sw.tts import db  # noqa: F401  (same db module)
         key = h.api._key("correct horse", blob[5:21])
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         data = json.loads(gzip.decompress(AESGCM(key).decrypt(blob[21:33], blob[33:], b"SWBK1")))
-        for secret in ("github_token", "lock_hash", "lock_enabled"):
+        for secret in ("github_token", "lock_hash", "lock_enabled", "api_key", "remote_hash", "remote_sessions", "remote_log", "remote_enabled", "remote_login"):
             self.assertNotIn(secret, data["settings"])
+        self.assertNotIn("sk-or-secret", json.dumps(data)); self.assertNotIn("salt:hash", json.dumps(data))
+
+    def test_domains_and_developments_travel_with_a_backup(self):
+        from sw import signals
+        signals.domains(); sid = h.add_source("S"); aid = h.add_article(sid, "vLLM", "x" * 600)
+        h.db.x("INSERT INTO developments(article_id,kind,claim,evidence,grounded,ts,created,model,domains) VALUES(?,?,?,?,?,?,?,?,?)", (aid, "efficiency", "Faster.", "measured", 1, 1.0, 1.0, "m", "[]"))
+        h.db.x("INSERT INTO development_runs(article_id,ts,status,model,n) VALUES(?,?,?,?,?)", (aid, 1.0, "ok", "m", 1))
+        before = self.counts()
+        blob = c.post("/api/backup", json={"passphrase": "correct horse"}).content; h.reset()
+        r = c.post("/api/restore", content=blob, headers={"x-passphrase": "correct horse"}); self.assertEqual(r.status_code, 200)
+        self.assertEqual(h.db.q("SELECT COUNT(*) n FROM developments", one=True)["n"], 1); self.assertEqual(h.db.q("SELECT COUNT(*) n FROM development_runs", one=True)["n"], 1)
+        self.assertGreaterEqual(h.db.q("SELECT COUNT(*) n FROM domains", one=True)["n"], 5)
 
     def test_a_wrong_passphrase_or_damaged_file_changes_nothing(self):
         before = self.counts()

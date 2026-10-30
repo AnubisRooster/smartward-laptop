@@ -32,7 +32,9 @@ DEFAULT_DOMAINS = [
 
 # ---------- domains (what "our domains" means) ----------
 def seed_domains():
-    if db.q("SELECT 1 FROM domains LIMIT 1"): return
+    """The starting domains, once. Deleting them all later leaves it empty rather than bringing them back."""
+    if db.get_setting("domains_seeded") or db.q("SELECT 1 FROM domains LIMIT 1"): db.set_setting("domains_seeded", True); return
+    db.set_setting("domains_seeded", True)
     for name, kws in DEFAULT_DOMAINS:
         db.x("INSERT INTO domains(name,keywords,created) VALUES(?,?,?)", (name, json.dumps(kws), db.now()))
 

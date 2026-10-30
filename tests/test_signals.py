@@ -143,10 +143,15 @@ class SignalsApi(unittest.TestCase):
 
     def test_domains_can_be_added_edited_and_removed(self):
         self.assertEqual(c.post("/api/domains", json={"name": "x", "keywords": []}).status_code, 400)
+        c.get("/api/domains")                                               # the starting domains are created the first time they are asked for
         did = c.post("/api/domains", json={"name": "Robotics", "keywords": ["robot", "manipulation"]}).json()["id"]
         c.put(f"/api/domains/{did}", json={"keywords": ["robot arm"]}); self.assertEqual([x for x in c.get("/api/domains").json() if x["id"] == did][0]["keywords"], ["robot arm"])
         self.assertEqual(c.put(f"/api/domains/{did}", json={"keywords": []}).status_code, 400)
         c.delete(f"/api/domains/{did}"); self.assertNotIn(did, [x["id"] for x in c.get("/api/domains").json()])
+
+    def test_deleting_every_domain_leaves_none_instead_of_bringing_the_defaults_back(self):
+        for d in c.get("/api/domains").json(): c.delete(f"/api/domains/{d['id']}")
+        self.assertEqual(c.get("/api/domains").json(), [])
 
     def test_a_signed_in_phone_may_read_signals_but_not_edit_domains(self):
         from tests.test_remote import VIA, turn_on, sign_in

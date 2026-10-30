@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -340,6 +340,22 @@ def _evidence_titles(domains_):
     rows = db.q(f"SELECT a.id,a.title,a.url,a.published,s.name source FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id IN ({','.join('?' * len(ids))})", list(ids))
     return {str(r["id"]): {"title": r["title"], "url": r["url"], "published": r["published"], "source": r["source"]} for r in rows}
 
+@app.post("/api/developments/run")
+def developments_run(body: dict):
+    """Read articles for what advanced in them. {"sample": 30} reads a spread of recent public articles; {"limit": n} reads the next n unread ones."""
+    if developments.STATE["running"]: bad("Already running.", 409)
+    ids = developments.sample(int(body["sample"])) if body.get("sample") else None
+    bg(developments.run, ids, int(body.get("limit", 60)))
+    return {"started": True, "articles": len(ids) if ids is not None else None}
+
+@app.get("/api/developments/status")
+def developments_status():
+    return {**developments.STATE, "read": db.q("SELECT COUNT(*) n FROM development_runs WHERE status='ok'", one=True)["n"], "developments": db.q("SELECT COUNT(*) n FROM developments", one=True)["n"]}
+
+@app.get("/api/developments")
+def developments_list(limit: int = 100, article_id: Optional[int] = None, domain: Optional[str] = None, kind: Optional[str] = None):
+    return developments.listing(min(limit, 500), article_id, domain, kind)
+
 @app.get("/api/search")
 def quick_search(q: str = ""): return events.quick_search(q)
 
@@ -554,12 +570,12 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}
     for t in TABLES:
-        rows = db.q(f"SELECT * FROM {t} ORDER BY id")
+        rows = db.q(f"SELECT * FROM {t} ORDER BY rowid")
         if not include_private:
             if t == "articles": rows = [r for r in rows if not r["private"]]
             if t in ("chunks", "mentions", "edges"): rows = [r for r in rows if r.get("article_id") not in private_ids]
@@ -605,7 +621,7 @@ def backup(body: dict):
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     pw = body.get("passphrase", "")
     if len(pw) < 8: bad("Use a passphrase of at least 8 characters.")
-    data = _dump(True, True); data["settings"] = {k: v for k, v in db.all_settings(hide=()).items() if k not in ("github_token", "lock_hash", "lock_enabled")}
+    data = _dump(True, True); data["settings"] = {k: v for k, v in db.all_settings(hide=()).items() if k not in ("github_token", "lock_hash", "lock_enabled", "api_key") and not k.startswith("remote_")}
     raw = gzip.compress(json.dumps(data).encode()); salt, nonce = secrets.token_bytes(16), secrets.token_bytes(12)
     blob = b"SWBK1" + salt + nonce + AESGCM(_key(pw, salt)).encrypt(nonce, raw, b"SWBK1")
     return Response(blob, media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=smartward-backup.swbk"})
