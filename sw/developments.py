@@ -17,6 +17,15 @@ _run_lock = threading.Lock()
 def _norm(t): return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
 
 
+def grounded(quote, body):
+    """Is this quote really in the article? Exact, or nearly: models trim, join sentences with an ellipsis and change a quote mark.
+    Needs 75% of the quote's three-word runs to be found in the article, so a paraphrase or an invented sentence does not pass."""
+    words = _norm(quote).split()
+    if len(words) < 5: return False
+    grams = [" ".join(words[i:i + 3]) for i in range(len(words) - 2)]
+    return sum(g in body for g in grams) / len(grams) >= 0.75
+
+
 def _prompt(a, domains):
     names = "; ".join(d["name"] for d in domains)
     text = (a["text"] or a["teaser"] or "")[:5000]
@@ -38,7 +47,8 @@ def _prompt(a, domains):
 
 def clean(a, raw, domains):
     """Turn whatever the model said into safe, checked rows (and say how many it had to throw away)."""
-    items = raw.get("developments") if isinstance(raw, dict) else None
+    items = raw if isinstance(raw, list) else (raw.get("developments") if isinstance(raw, dict) else None)       # some models answer with the bare list
+    if items is None and isinstance(raw, dict) and len(raw) == 1 and isinstance(next(iter(raw.values())), list): items = next(iter(raw.values()))
     if not isinstance(items, list): raise ValueError("model gave no usable developments")
     body = _norm((a["text"] or "") + " " + (a["teaser"] or "") + " " + (a["title"] or ""))
     known = {d["name"].lower(): d["name"] for d in domains}
@@ -51,10 +61,14 @@ def clean(a, raw, domains):
         evidence = str(it.get("evidence", "")).strip().lower(); evidence = evidence if evidence in EVIDENCE else "claimed"
         if evidence == "measured" and not value: evidence = "claimed"                 # "measured" needs a number
         quote = " ".join(str(it.get("quote", "")).split())[:200]
-        grounded = bool(quote) and len(_norm(quote)) >= 12 and _norm(quote) in body        # the model must point at words that are really there
+        is_grounded = grounded(quote, body)                                                  # the model must point at words that are really there
         doms = [known[str(d).strip().lower()] for d in (it.get("domains") or []) if str(d).strip().lower() in known]
+        if len(doms) > 2:                                                                    # tagging everything is tagging nothing: keep the ones whose own words appear
+            text = (claim + " " + it.get("subject", "") + " " + quote + " " + (a["title"] or "")).lower()
+            hit = [d for d in doms if (lambda rx: rx and rx.search(text))(signals.keyword_regex(next(x["keywords"] for x in domains if x["name"] == d)))]
+            doms = hit[:2]
         out.append({"kind": kind, "subject": " ".join(str(it.get("subject", "")).split())[:100], "claim": claim, "metric": metric, "value": value, "baseline": baseline,
-                    "evidence": evidence if grounded else "anecdotal", "claimed_evidence": evidence, "domains": doms, "quote": quote, "grounded": grounded})
+                    "evidence": evidence if is_grounded else "anecdotal", "claimed_evidence": evidence, "domains": doms, "quote": quote, "grounded": is_grounded})
     return out, dropped
 
 
@@ -91,11 +105,12 @@ def sample(n=30, now=None):
     return [r["id"] for r in picked[:n]]
 
 
-def run(ids=None, limit=60, workers=None):
+def run(ids=None, limit=60, workers=None, retry_failed=False):
     """Read the given articles (or the next `limit` unread ones) for developments. Returns {"done", "paused", "failed"}."""
     if not _run_lock.acquire(blocking=False): return {"done": 0, "paused": False, "failed": 0, "busy": True}
     try:
         ds = signals.domains()
+        if retry_failed: db.x("DELETE FROM development_runs WHERE status LIKE 'failed%'")
         if ids is None: ids = [r["id"] for r in db.q("SELECT a.id FROM articles a WHERE a.relevant=1 AND a.private=0 AND a.id NOT IN (SELECT article_id FROM development_runs) AND length(COALESCE(a.text,a.teaser,''))>500 ORDER BY a.published DESC LIMIT ?", (limit,))]
         rows = [r for r in (db.q("SELECT a.*, s.name source FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id=?", (i,), one=True) for i in ids) if r]
         STATE.update(running=True, done=0, total=len(rows), paused=False, message="")
@@ -107,8 +122,8 @@ def run(ids=None, limit=60, workers=None):
                 try:
                     items, dropped = f.result(); store(a, items, llm.pick_model(bool(a["private"]), "developments"))
                 except CancelledError: continue
-                except llm.Unavailable:
-                    STATE.update(paused=True, message="The analysis models are busy; waiting is fine, the rest will be read next time.")
+                except llm.Unavailable as e:
+                    STATE.update(paused=True, message=f"{str(e)[:240]} (waiting is fine; the rest will be read next time)")
                     for o in futures: o.cancel()
                 except Exception as e:
                     failed += 1; db.x("INSERT OR REPLACE INTO development_runs(article_id,ts,status,model,n) VALUES(?,?,?,?,0)", (a["id"], db.now(), f"failed: {e}"[:120], ""))

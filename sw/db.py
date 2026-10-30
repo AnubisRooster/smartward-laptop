@@ -81,7 +81,7 @@ DEFAULTS = {
     "auto_approve": False, "onboarding_completed": False,
     "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60, "lock_idle": 15,
     "voice_rate": 1.0, "voice_name": "", "digest_notify": False,
-    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True,
+    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free", "openrouter/cohere/north-mini-code:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True,
     # Natural read-aloud voice (Kokoro, on this machine). engine: auto | kokoro | browser
     "tts_engine": "auto", "tts_url": "http://127.0.0.1:8880", "tts_voice": "af_heart", "tts_profiles": {}, "tts_profile": "",
     "private_repo_local_only": True, "github_token": "", "lock_hash": "", "api_key": "",

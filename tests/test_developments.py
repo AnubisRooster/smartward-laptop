@@ -31,6 +31,23 @@ class Cleaning(unittest.TestCase):
         out, dropped = self.clean([item()]); self.assertEqual(dropped, 0)
         self.assertEqual((out[0]["kind"], out[0]["evidence"], out[0]["grounded"], out[0]["domains"]), ("efficiency", "measured", True, ["Inference serving"]))
 
+    def test_a_quote_with_an_ellipsis_or_a_changed_quote_mark_still_counts_but_a_paraphrase_does_not(self):
+        body = _norm_text = "We scale lattice quantization to billion parameter models. The method consistently improves accuracy across tasks, with gains of up to 6.7 points."
+        a = article(text=body)
+        ok, _ = dv.clean(a, {"developments": [item(quote="We scale lattice quantization to billion-parameter models ... consistently improves accuracy across tasks, with gains of up to 6.7 points")]}, self.ds)
+        self.assertTrue(ok[0]["grounded"])
+        bad, _ = dv.clean(a, {"developments": [item(quote="Researchers demonstrate that large networks can be compressed dramatically with almost no loss")]}, self.ds)
+        self.assertFalse(bad[0]["grounded"])
+
+    def test_a_bare_list_is_accepted_as_the_answer(self):
+        out, _ = dv.clean(article(), [item()], self.ds); self.assertEqual(len(out), 1)
+        out, _ = dv.clean(article(), {"items": [item()]}, self.ds); self.assertEqual(len(out), 1)
+
+    def test_tagging_every_domain_keeps_only_the_two_whose_words_appear(self):
+        names = [d["name"] for d in self.ds]
+        out, _ = self.clean([item(domains=names, claim="Chunked prefill raises serving throughput.", quote="measured 2.1x higher throughput than vLLM 0.9 on the ShareGPT workload")])
+        self.assertLessEqual(len(out[0]["domains"]), 2); self.assertIn("Inference serving", out[0]["domains"]); self.assertNotIn("Enterprise AI", out[0]["domains"])
+
     def test_a_quote_that_is_not_in_the_article_makes_it_ungrounded_and_unproven(self):
         out, _ = self.clean([item(quote="the team achieved a 10x speedup on every workload")])
         self.assertFalse(out[0]["grounded"]); self.assertEqual(out[0]["evidence"], "anecdotal"); self.assertEqual(out[0]["claimed_evidence"], "measured")
@@ -51,7 +68,7 @@ class Cleaning(unittest.TestCase):
         out, _ = self.clean([item(claim="x" * 900) for _ in range(9)]); self.assertEqual(len(out), 4); self.assertEqual(len(out[0]["claim"]), 300)
 
     def test_something_that_is_not_the_expected_shape_is_an_error(self):
-        for bad in (None, {"entities": []}, {"developments": "x"}, []):
+        for bad in (None, {"entities": [], "x": 1}, {"developments": "x"}, "text"):
             with self.assertRaises(ValueError): dv.clean(article(), bad, self.ds)
 
     def test_an_empty_list_is_a_valid_answer(self): self.assertEqual(self.clean([]), ([], 0))

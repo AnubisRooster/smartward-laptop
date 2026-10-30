@@ -345,7 +345,7 @@ def developments_run(body: dict):
     """Read articles for what advanced in them. {"sample": 30} reads a spread of recent public articles; {"limit": n} reads the next n unread ones."""
     if developments.STATE["running"]: bad("Already running.", 409)
     ids = developments.sample(int(body["sample"])) if body.get("sample") else None
-    bg(developments.run, ids, int(body.get("limit", 60)))
+    bg(developments.run, ids, int(body.get("limit", 60)), None, bool(body.get("retry_failed")))
     return {"started": True, "articles": len(ids) if ids is not None else None}
 
 @app.get("/api/developments/status")

@@ -107,3 +107,12 @@ class Reading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Reasons(unittest.TestCase):
+    def test_the_reason_a_model_was_unavailable_is_shown_without_keys_or_account_ids(self):
+        h.reset(); db.set_setting("api_key", "sk-or-v1-supersecretkey123"); db.set_setting("model", "openrouter/openrouter/free")
+        err = RuntimeError('429 rate limit {"error":{"message":"free-models-per-min"},"user_id":"user_abc123"} key sk-or-v1-supersecretkey123')
+        with mock.patch("litellm.completion", side_effect=err), mock.patch("sw.llm.time.sleep"):
+            with self.assertRaises(llm.Unavailable) as cm: llm.text([{"role": "user", "content": "x"}], feature="graph")
+        msg = str(cm.exception); self.assertIn("free-models-per-min", msg); self.assertNotIn("user_abc123", msg); self.assertNotIn("supersecretkey", msg)

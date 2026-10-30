@@ -54,6 +54,14 @@ def pick_model(private=False, feature="chat"):
     if not _is_local(model) and (private or budget_left() <= 0): return _local()
     return model
 
+def _why(e):
+    """A short, safe reason from a provider error: no keys, no account ids."""
+    t = re.sub(r"\s+", " ", str(e)); t = re.sub(r'"user_id"\s*:\s*"[^"]*"', "", t); t = re.sub(r"sk-[A-Za-z0-9_\-]{8,}", "•••", t)
+    k = db.get_setting("api_key")
+    if k: t = t.replace(k, "•••")
+    return f"{type(e).__name__}: {t[-200:]}"
+
+
 class Unavailable(Exception):
     """Every analysis model in the chain is busy or limited right now. Not the article's fault: try again later without counting a failure."""
 
@@ -64,13 +72,15 @@ def chat(messages, feature="chat", private=False, tools=None, tool_choice=None, 
     model = model or pick_model(private, feature)
     chain = analysis_models() if (feature in ANALYSIS_FEATURES and model in analysis_models()) else [model]
     last = None
-    for i, m in enumerate(chain):                      # the analysis model, then its fallbacks; anything else has just itself
-        try: return _chat_once(completion, messages, feature, m, tools, tool_choice, temperature, timeout)
-        except Exception as e:
-            last = e
-            if i == len(chain) - 1 or not RETRYABLE.search(f"{type(e).__name__} {e}"): break
-            time.sleep(min(4, 1 + i))                   # a short breath before the next one, so a burst of limits doesn't hammer them all
-    if feature in ANALYSIS_FEATURES and RETRYABLE.search(f"{type(last).__name__} {last}"): raise Unavailable(f"The analysis model is busy or rate-limited ({type(last).__name__}).") from last
+    for rnd in range(2 if len(chain) > 1 else 1):      # the whole chain once, and if every model was busy, once more after a pause
+        for i, m in enumerate(chain):                  # the analysis model, then its fallbacks; anything else has just itself
+            try: return _chat_once(completion, messages, feature, m, tools, tool_choice, temperature, timeout)
+            except Exception as e:
+                last = e
+                if not RETRYABLE.search(f"{type(e).__name__} {e}"): raise
+                time.sleep(min(4, 1 + i))              # a short breath before the next one, so a burst of limits doesn't hammer them all
+        if rnd == 0 and len(chain) > 1: time.sleep(6)
+    if feature in ANALYSIS_FEATURES: raise Unavailable(f"The analysis model is busy or rate-limited: {_why(last)}") from last
     raise last
 
 def _chat_once(completion, messages, feature, model, tools, tool_choice, temperature, timeout):
