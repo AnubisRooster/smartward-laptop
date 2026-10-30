@@ -4,6 +4,7 @@ import { Tab, useHashSync, useLoad, useNav, speech } from './hooks';
 import { Progress, Spin, cx } from './ui';
 import { FeedbackHost } from './feedback';
 import Shortcuts from './Shortcuts';
+import Boundary from './Boundary';
 import Palette from './Palette';
 import Links from './Links';
 import { onPhone } from './device';
@@ -123,7 +124,7 @@ export default function App() {
         {p.running && tab !== 'reading' && (
           <div className="border-b border-zinc-800 bg-zinc-900/60 px-4 py-2"><Progress value={pct} label={`${p.step || 'Working'}… ${p.total ? `${p.done} of ${p.total}` : ''}`} /></div>)}
         {stale && <div role="status" className="flex items-center justify-between gap-3 border-b border-indigo-800 bg-indigo-950/40 px-4 py-2 text-sm">SmartWard was updated. <button className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500" onClick={() => location.reload()}>Reload to use the new version</button></div>}
-        <div className="min-h-0 flex-1 overflow-hidden"><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></div>
+        <div className="min-h-0 flex-1 overflow-hidden"><Boundary resetKey={tab}><Suspense fallback={<div className="p-6" role="status"><Spin /></div>}><Body /></Suspense></Boundary></div>
       </main>
       <Shortcuts />
       <Palette lockOn={lockOn} />

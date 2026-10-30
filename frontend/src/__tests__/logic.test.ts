@@ -191,3 +191,17 @@ describe('answers read aloud: tables, rules and dashes', () => {
     expect(out).not.toMatch(/[|*#\[\]`]|--|—|https|R1/); expect(out).toContain('Pruning, keeps diverse candidates.'); expect(out).toContain('small k, worse.'); expect(out).toContain('See the paper to section 3.');
   });
 });
+
+
+import { isChunkError, reloadOnce } from '../chunkError';
+describe('an old window after an update', () => {
+  it('recognises a page file that no longer exists, in each browser\'s words', () => {
+    for (const m of ['Failed to fetch dynamically imported module: http://127.0.0.1:8000/assets/Settings-abc.js', 'error loading dynamically imported module', 'Importing a module script failed.', 'ChunkLoadError: Loading chunk 7 failed']) expect(isChunkError(new Error(m))).toBe(true);
+    for (const m of ['x is not a function', 'Network Error', '']) expect(isChunkError(new Error(m))).toBe(false); expect(isChunkError(null)).toBe(false);
+  });
+  it('reloads once, then not again for 30 seconds, so it can never loop', () => {
+    const mem: Record<string, string> = {}; const store = { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v; } }; let reloads = 0; const go = () => { reloads++; };
+    expect(reloadOnce(1_000_000, store, go)).toBe(true); expect(reloadOnce(1_010_000, store, go)).toBe(false); expect(reloads).toBe(1);
+    expect(reloadOnce(1_031_000, store, go)).toBe(true); expect(reloads).toBe(2);
+  });
+});
