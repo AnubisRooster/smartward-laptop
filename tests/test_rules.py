@@ -122,5 +122,46 @@ class Rules(unittest.TestCase):
         self.assertEqual(sc["parts"]["fidelity"], 0)
 
 
+class FiveFixes(unittest.TestCase):
+    def setUp(self): h.reset()
+
+    def test_broad_shared_and_irrelevant_words_dont_count_as_evidence(self):
+        from tests.test_implications import dev, project
+        pid = project(); src = h.add_source("Blog"); a = h.add_article(src, "News", "x" * 600)
+        dev(a, claim="Cybersecurity and AI safety teams cut latency; Battle Drones demo; vLLM adds a sandbox.")
+        gamed = "Control plane (service): cybersecurity, ai safety\nSandbox (service): battle drones, sandbox\nRouter (gateway): latency, vllm\nServing (model): vllm\n" \
+                "Router -> Serving: routes\nControl plane => Serving: schedules\nSandbox -> Router: x"
+        m = maps.parse(gamed); over = maps.overlay(pid, m["parts"])
+        by = {p["label"]: over[p["id"]] for p in m["parts"]}
+        self.assertEqual(by["Control plane"]["development_count"], 0); self.assertEqual(by["Control plane"]["ignored"], {"cybersecurity": "too broad", "ai safety": "too broad"})
+        self.assertEqual(by["Router"]["ignored"]["vllm"], "on more than one part"); self.assertEqual(by["Router"]["development_count"], 0)
+        self.assertEqual(by["Control plane"]["terms"]["cybersecurity"], 1)                                       # still shown, just not counted
+        ids = {p["label"]: p["id"] for p in m["parts"]}
+        over2 = maps.overlay(pid, m["parts"], irrelevant={ids["Sandbox"]: {"battle drones"}})
+        self.assertEqual(over2[ids["Sandbox"]]["ignored"], {"battle drones": "not about this part (reviewer)"}); self.assertEqual(over2[ids["Sandbox"]]["development_count"], 1)   # 'sandbox' still counts
+        self.assertLess(rules.score(m, None, over)["parts"]["evidence"], 50)
+
+    def test_the_reviewers_irrelevant_words_are_kept_only_for_real_parts_and_words(self):
+        m = maps.parse(GOOD)
+        rev = maps._clean_review({"irrelevant_words": [{"part": "Harness", "words": ["gvisor", "made up"]}, {"part": "Ghost", "words": ["x"]}]}, m)
+        self.assertEqual(rev["irrelevant"], {"Harness": ["gvisor"]})
+        self.assertEqual(maps.irrelevant_ids(m, rev), {next(p["id"] for p in m["parts"] if p["label"] == "Harness"): {"gvisor"}})
+
+    def test_parts_must_have_the_type_they_are(self):
+        bad = GOOD.replace("Secrets (service): vault", "Secrets (infra): vault").replace("Bedrock (external): bedrock", "Bedrock (model): bedrock").replace("Model router (gateway)", "Model router (service)")
+        d = failed(bad)["C10"]
+        self.assertIn("Secrets is infra", d); self.assertIn("Bedrock is model", d); self.assertIn("Model router is service", d)
+        self.assertNotIn("C10", failed(GOOD))
+
+    def test_what_code_finds_missing_overrides_the_reviewer(self):
+        m = maps.parse(GOOD); p = {"name": "P", "goal": "It will include a coding agent, self evolving skills and a model router."}
+        missing_skills = maps.parse(GOOD.replace("Self-evolving skills (service): skill evolution\n", "").replace("Self-evolving skills -> Evaluation: candidate skills\n", ""))
+        rev = {"implausible": [], "bad_protocols": [], "constraints": [{"text": "All required components are present", "met": True, "why": "looks complete"},
+                                                                       {"text": "Includes self evolving skills", "met": True, "why": "yes"}, {"text": "Uses AWS", "met": True, "why": "Bedrock"}]}
+        sc = rules.score(missing_skills, p, None, rev); c = {x["text"]: x for x in sc["constraints"]}
+        self.assertFalse(c["All required components are present"]["met"]); self.assertIn("self evolving skills", c["Includes self evolving skills"]["why"]); self.assertTrue(c["Uses AWS"]["met"])
+        self.assertTrue(all(x["met"] for x in rules.score(m, p, None, rev)["constraints"]))                    # nothing missing: the reviewer stands
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -210,6 +210,27 @@ class Drafting(unittest.TestCase):
         with mock.patch("litellm.completion", side_effect=f): self.run_draft()
         self.assertTrue(all(k["model"].startswith("ollama") for k in calls["draft"] + calls["review"]))
 
+    def test_review_and_repair_failures_are_in_the_history(self):
+        def f(**kw):
+            msg = kw["messages"][0]["content"]
+            if msg.startswith("You review"): raise RuntimeError("Request timed out")
+            if "A review scored it" in msg: return NS(choices=[NS(message=NS(content="not json at all"))], usage=NS(prompt_tokens=1, completion_tokens=1))
+            return answer(self.weak)
+        from types import SimpleNamespace as NS
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        steps = [(x["step"], x.get("error")) for x in d["history"]]
+        self.assertIn(("review failed", "the model took too long"), steps); self.assertIn(("repair failed", "the model's reply wasn't usable"), steps)
+
+    def test_the_reviewer_is_chosen_so_it_isnt_the_drafter(self):
+        f, calls = self.fake([self.good] * 3)
+        db.set_setting("review_model", "openrouter/strong/reviewer")
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        self.assertEqual({k["model"] for k in calls["review"]}, {"openrouter/strong/reviewer"}); self.assertEqual(d["reviewer"], "openrouter/strong/reviewer")
+        db.set_setting("review_model", ""); db.set_setting("design_model", "openrouter/some/drafter")
+        f, calls = self.fake([self.good] * 3)
+        with mock.patch("litellm.completion", side_effect=f): self.run_draft()
+        self.assertEqual({k["model"] for k in calls["review"]}, {"openrouter/anthropic/claude-sonnet-4-5"})        # the main model reviews another model's draft
+
     def test_a_chosen_design_model_drafts(self):
         db.set_setting("design_model", "openrouter/some/strong-model")
         f, calls = self.fake([self.good] * 3)

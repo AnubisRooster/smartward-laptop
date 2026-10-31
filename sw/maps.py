@@ -140,23 +140,51 @@ def _pool(now=None):
     return rows
 
 
-def overlay(pid, parts, now=None, pool=None):
-    """For each part: the recent developments and this project's open or accepted hypotheses that use its words, and how often each word matches."""
+BROAD = {signals.canon(w) for w in signals.GENERIC | {
+    "cybersecurity", "security", "ai safety", "safety", "alignment", "throughput", "latency", "performance", "scalability", "reliability", "efficiency",
+    "software development", "development", "linux", "macos", "windows", "python", "benchmark", "benchmarks", "research", "enterprise", "cloud", "data",
+    "models", "ai agents", "agents", "agent", "llms", "large language models", "open source", "infrastructure", "platform", "tools", "ai safety research"}}
+
+
+def ignored_words(parts, irrelevant=None):
+    """{part id: {word: why}} for words that don't count as evidence: too broad, used on more than one part, or (per the reviewer) not about that part.
+    This is what stops a map from collecting "evidence" by borrowing popular words."""
+    shared = set()
+    seen = {}
+    for p in parts:
+        for w in p["terms"]:
+            if w in seen and seen[w] != p["id"]: shared.add(w)
+            seen.setdefault(w, p["id"])
+    out = {}
+    for p in parts:
+        ig = {}
+        for w in p["terms"]:
+            if signals.canon(w) in BROAD: ig[w] = "too broad"
+            elif w in shared: ig[w] = "on more than one part"
+            elif w in (irrelevant or {}).get(p["id"], ()): ig[w] = "not about this part (reviewer)"
+        out[p["id"]] = ig
+    return out
+
+
+def overlay(pid, parts, now=None, pool=None, irrelevant=None):
+    """For each part: the recent developments and this project's open or accepted hypotheses that use its words, how often each word matches,
+    and which words were ignored (broad, shared, or not about the part). Only the words that count place items on a part."""
     devs = pool if pool is not None else _pool(now)
     hyps = db.q("SELECT id,headline,implication,direction,confidence,status FROM hypotheses WHERE project_id=? AND status IN ('new','accepted')", (pid,)) if pid else []
-    out = {}
+    out = {}; ign = ignored_words(parts, irrelevant)
     for c in parts:
-        words = c["terms"] or [c["label"].lower()]
+        all_words = c["terms"] or [c["label"].lower()]
+        words = [w for w in all_words if w not in ign.get(c["id"], {})]
         rx = term_rx(words)
         ds = [d for d in devs if rx.search(d["_t"])] if rx else []
         hs = [h for h in hyps if rx.search(f"{h['headline']} {h['implication']}")] if rx else []
         per = {}
-        for w in words:
+        for w in all_words:
             r1 = term_rx([w]); per[w] = sum(1 for d in devs if r1.search(d["_t"])) if r1 else 0
         dirs = {h["direction"] for h in hs}
         tone = "threatens" if "threatens" in dirs else "accelerates" if "accelerates" in dirs else "enables" if "enables" in dirs else "news" if ds else "quiet"
         out[c["id"]] = {"tone": tone, "developments": [{k: v for k, v in d.items() if k != "_t"} for d in ds[:8]], "development_count": len(ds),
-                        "measured": sum(1 for d in ds if d["evidence"] == "measured"), "hypotheses": hs, "terms": per}
+                        "measured": sum(1 for d in ds if d["evidence"] == "measured"), "hypotheses": hs, "terms": per, "ignored": ign.get(c["id"], {})}
     return out
 
 
@@ -206,7 +234,7 @@ def stored_review(pid, text):
 
 def build(pid, text, pool=None):
     """Everything the editor and the diagram need for some lines: the parsed map, the overlay, the score, notes and the Mermaid source."""
-    m = parse(text); over = overlay(pid, m["parts"], pool=pool); rev = stored_review(pid, text) if pid else None
+    m = parse(text); rev = stored_review(pid, text) if pid else None; over = overlay(pid, m["parts"], pool=pool, irrelevant=irrelevant_ids(m, rev))
     return {**m, "overlay": over, "checks": [c for c in patterns.check(m, over) if c["level"] == "info"], "mermaid": mermaid(m, over),
             "score": rules.score(m, _project(pid), over, rev), "reviewed": bool(rev),
             "pattern_title": patterns.PATTERNS[m["pattern"]]["title"] if m["pattern"] else None}
@@ -234,7 +262,10 @@ def _prompt(p, docs, vocab, pattern):
             "Arrows go from the caller to the callee; data stores and infrastructure are called, they don't call; control arrows (kind=control) come from the parts that "
             "deploy, schedule or govern. Include every part the person named, under their names, then add what a security and architecture review would require, "
             "marked suggested=true with a short why. Aim for 12 to 20 parts. Each part gets 2 to 5 match words that NEWS ARTICLES use for it (product, project "
-            "and technique names), preferably from VOCABULARY; never borrow another part's words. Reply with JSON only:\n" + SCHEMA + "\n\n"
+            "and technique names), preferably from VOCABULARY; never borrow another part's words. Broad words (security, AI safety, latency, throughput, 'AI agents'), "
+            "words used on two parts, and words that aren't about the part are ignored when evidence is counted, so they gain nothing. "
+            "Types must match what a part is: secrets managers, observability and control planes are services, stores are datastores, routers are gateways, "
+            "models in a cloud zone are external. Reply with JSON only:\n" + SCHEMA + "\n\n"
             "BEST PRACTICES THE REVIEW CHECKS (OWASP LLM Top 10 and agentic guidance, AWS/Azure Well-Architected for AI, NIST AI RMF, zero trust, C4):\n" + PRACTICES + "\n\n"
             + (f"REFERENCE PATTERN: {pat['title']}. Expected roles:\n{roles}\n\n" if pat else "")
             + f"VOCABULARY (themes in the person's reading): {', '.join(vocab)}\n\n"
@@ -290,6 +321,15 @@ def from_json(data, fallback_pattern=None):
     return m
 
 
+def _why(e):
+    """A failure in a few plain words for the draft's history (a timeout, a busy model, an unreadable reply)."""
+    t = f"{type(e).__name__}: {e}"
+    if re.search(r"timeout|timed out", t, re.I): return "the model took too long"
+    if llm.RETRYABLE.search(t): return "the model was busy or rate-limited"
+    if isinstance(e, ValueError): return "the model's reply wasn't usable"
+    return llm._why(e)[:120]
+
+
 def _drafter(private): return None if private else (db.get_setting("design_model") or llm.pick_model(False, "chat"))
 
 
@@ -318,10 +358,13 @@ def _review_prompt(m, project):
     return ("You review an architecture diagram written as lines (Part (type): words; [Zone]; A -> B: what flows (protocol); A => B: control). "
             "Answer ONLY these three questions as JSON; do not suggest new parts or rules:\n"
             '{"implausible":[{"from":"part","to":"part","why":"short"}],"bad_protocols":[{"from":"part","to":"part","why":"short"}],'
-            '"constraints":[{"text":"a requirement stated in the brief","met":true,"why":"short"}]}\n'
+            '"constraints":[{"text":"a requirement stated in the brief","met":true,"why":"short"}],'
+            '"irrelevant_words":[{"part":"part","words":["match words that do not name or describe that part"]}]}\n'
             "1. implausible: connections whose direction or meaning is clearly wrong (e.g. a store calling a service, a control arrow from something that controls nothing). "
             "List only clear errors.\n2. bad_protocols: connections whose named protocol is implausible for that hop.\n"
-            "3. constraints: each concrete requirement in the BRIEF (platforms, providers, deployment, components) and whether the diagram meets it.\n\n"
+            "3. constraints: each concrete requirement in the BRIEF (platforms, providers, deployment, components) and whether the diagram meets it.\n"
+            "4. irrelevant_words: for each part, the match words after the colon that are NOT a name, product or technique of that part "
+            "(e.g. 'battle drones' on a sandbox, 'kv cache' on a router).\n\n"
             f"BRIEF: {project.get('name', '')}. {project.get('goal') or ''} {project.get('brief') or ''}\n\nDIAGRAM:\n{to_text(m)}")
 
 
@@ -336,16 +379,36 @@ def _clean_review(raw, m):
     if not isinstance(raw, dict): raise ValueError("The reviewer gave no usable answer.")
     cons = [{"text": _clean(c.get("text"), 160), "met": bool(c.get("met")), "why": _clean(c.get("why"), 160)} for c in (raw.get("constraints") or [])[:8]
             if isinstance(c, dict) and _clean(c.get("text"), 160)]
-    return {"implausible": pairs(raw.get("implausible")), "bad_protocols": pairs(raw.get("bad_protocols")), "constraints": cons}
+    terms = {p["label"].lower(): set(p["terms"]) for p in m["parts"]}; irr = {}
+    for x in (raw.get("irrelevant_words") or [])[:30]:
+        if isinstance(x, dict) and str(x.get("part", "")).lower() in terms:
+            ws = [w.strip().lower() for w in (x.get("words") or []) if isinstance(w, str) and w.strip().lower() in terms[x["part"].lower()]]
+            if ws: irr[labels[x["part"].lower()]] = sorted(set(irr.get(labels[x["part"].lower()], [])) | set(ws))
+    return {"implausible": pairs(raw.get("implausible")), "bad_protocols": pairs(raw.get("bad_protocols")), "constraints": cons, "irrelevant": irr}
+
+
+def irrelevant_ids(m, rev):
+    """The reviewer's irrelevant words keyed by part id (the review names parts by label)."""
+    if not rev: return None
+    ids = {p["label"]: p["id"] for p in m["parts"]}
+    return {ids[k]: set(v) for k, v in (rev.get("irrelevant") or {}).items() if k in ids}
 
 
 def _reviewer_call(prompt, private):
     """A different model from the one that drafted, so the drafter doesn't mark its own work: the analysis models, or the main model if the drafter is one of them."""
     msgs = [{"role": "user", "content": prompt}]
     if private: return llm.text(msgs, feature="design", private=True), "local"
-    drafter = _drafter(False)
-    if drafter in llm.analysis_models(): return llm.text(msgs, feature="design", model=llm.pick_model(False, "chat")), llm.pick_model(False, "chat")
+    chosen = reviewer_model()
+    if chosen: return llm.text(msgs, feature="design", model=chosen), chosen
     return llm.text(msgs, feature="analysis"), llm.analysis_models()[0] if llm.analysis_models() else "analysis"
+
+
+def reviewer_model():
+    """The review model: the one chosen in Settings, else the main model when the drafter is something else, else None (the analysis models)."""
+    chosen = (db.get_setting("review_model") or "").strip()
+    if chosen: return chosen
+    drafter, main = _drafter(False), llm.pick_model(False, "chat")
+    return main if drafter != main else None
 
 
 def _private(pid):
@@ -421,24 +484,28 @@ def draft(pid):
     history = [{"step": "drafts", "scores": sorted((c[2]["total"] for c in cands), reverse=True)}]
     rev = None
     _step(pid, f"Best draft scored {sc['total']}; a second model is reviewing it")
-    try: rev = run_review(pid, m, p); sc = rules.score(m, p, over, rev); history.append({"step": "review", "score": sc["total"]})
-    except Exception: pass
+    try:
+        rev = run_review(pid, m, p); over = overlay(pid, m["parts"], pool=pool, irrelevant=irrelevant_ids(m, rev))
+        sc = rules.score(m, p, over, rev); history.append({"step": "review", "score": sc["total"]})
+    except Exception as e: history.append({"step": "review failed", "error": _why(e)})
     own = {x["label"].lower() for x in m["parts"] if not x["suggested"]}
     for k in range(REPAIRS):
         if not rules.failing(sc) and not sc["missing"] and all(b["present"] for b in sc["brief"]): break
         _step(pid, f"Score {sc['total']}; repairing {len(rules.failing(sc))} failed rule{'s' if len(rules.failing(sc)) != 1 else ''} (round {k + 1} of {REPAIRS})")
         try:
             m2 = from_json(llm.json_from(_design_call(_repair_prompt(to_text(m), sc, _dead(m, over), vocab), private)), m["pattern"])
-            o2 = overlay(pid, m2["parts"], pool=pool)
             r2 = None
             try: r2 = run_review(pid, m2, p)
-            except Exception: pass
+            except Exception as e: history.append({"step": "review failed", "error": _why(e)})
+            o2 = overlay(pid, m2["parts"], pool=pool, irrelevant=irrelevant_ids(m2, r2))
             s2 = rules.score(m2, p, o2, r2)
             kept = own <= {x["label"].lower() for x in m2["parts"]}
-            if s2["total"] > sc["total"] and kept and len(shared_words(m2)) <= len(shared_words(m)) + 1:
+            if s2["total"] > sc["total"] and kept:
                 m, over, sc, rev = m2, o2, s2, r2; history.append({"step": "repair", "score": sc["total"]})
-            else: history.append({"step": "repair rejected", "score": s2["total"]}); break
-        except Exception: break
+            else:
+                why = "renamed or dropped your parts" if not kept else f"scored {s2['total']}, not higher"
+                history.append({"step": "repair rejected", "score": s2["total"], "error": why}); break
+        except Exception as e: history.append({"step": "repair failed", "error": _why(e)}); break
     text = to_text(m)
     if rev: _keep_review(pid, text, rev)
     return {"text": text, "score": sc, "history": history, "pattern": m["pattern"], "model": _drafter(private) or "local",

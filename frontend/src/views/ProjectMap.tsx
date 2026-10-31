@@ -57,7 +57,7 @@ function Scorecard({ sc, reviewed, notes, onReview, reviewing, onWaive, open }: 
   return (
     <details open={open} className="rounded-lg border border-zinc-800 p-2 text-xs">
       <summary className="flex cursor-pointer flex-wrap items-center gap-2"><span className={'text-lg font-semibold ' + tone(sc.total)}>{sc.total}</span><span className="text-zinc-400">/ 100 architecture score · {fails.length} rule{fails.length === 1 ? '' : 's'} to fix{sc.missing.length ? `, ${sc.missing.length} expected part${sc.missing.length === 1 ? '' : 's'} missing` : ''}</span>
-        <span className="ml-auto text-zinc-500">{reviewed ? `reviewed by ${(rev?.model || '').replace(/^openrouter\//, '')}` : 'not reviewed by the second model'}</span>
+        <span className="ml-auto text-zinc-500" title="Set a capable review model in Settings → Model for better reviews">{reviewed ? `reviewed by ${(rev?.model || '').replace(/^openrouter\//, '')}` : 'not reviewed by the second model'}</span>
         {onReview && <Btn small onClick={onReview} loading={reviewing} title="A second model checks arrow directions, protocols and the brief's requirements">{reviewed ? 'Review again' : 'Review now'}</Btn>}</summary>
       <div className="mt-2 grid gap-1 sm:grid-cols-5">{PARTS.map(([k, label, w]) => sc.parts[k] !== undefined && (
         <div key={k} title={`${w}% of the score`}><div className="flex justify-between text-zinc-400"><span>{label}</span><span className={tone(sc.parts[k])}>{sc.parts[k]}</span></div>
@@ -86,7 +86,10 @@ function Matches({ map }: { map: any }) {
       <tbody>{map.parts.map((p: any) => { const o = map.overlay[p.id] || {}; return (
         <tr key={p.id} className="border-t border-zinc-800 align-top"><td className="py-1 pr-2">{p.suggested && <span title="Suggested by SmartWard">~</span>}{p.label} <span className="text-zinc-500">{p.type}{p.zone ? ` · ${p.zone}` : ''}</span></td>
           <td className={'pr-2 ' + (o.development_count ? 'text-zinc-200' : 'text-amber-300')}>{o.development_count || 0}</td>
-          <td>{Object.entries(o.terms || {}).map(([t, n]: any) => <span key={t} className={'mr-2 ' + (n ? 'text-zinc-300' : 'text-amber-300/80')}>{t} {n}</span>)}</td></tr>); })}</tbody></table></div>
+          <td>{Object.entries(o.terms || {}).map(([t, n]: any) => o.ignored?.[t]
+            ? <span key={t} className="mr-2 text-zinc-500 line-through" title={`Not counted: ${o.ignored[t]}`}>{t} {n}</span>
+            : <span key={t} className={'mr-2 ' + (n ? 'text-zinc-300' : 'text-amber-300/80')}>{t} {n}</span>)}</td></tr>); })}</tbody></table>
+      <p className="mt-1 text-[11px] text-zinc-500">Struck-through words don’t count as evidence: too broad, used on more than one part, or not about the part (per the reviewer). Hover for why.</p></div>
   );
 }
 
@@ -136,7 +139,8 @@ export default function ProjectMap({ pid }: { pid: number }) {
       if (st?.error) throw new Error(st.error);
       const d = st?.result; if (!d) throw new Error('The draft didn’t finish. Try again.');
       setEditing(d.text); setPicked(null);
-      const steps = (d.history || []).map((h: any) => h.step === 'drafts' ? `${h.scores.length} drafts scored ${h.scores.join(', ')}` : h.step === 'review' ? `reviewed: ${h.score}` : h.step === 'repair' ? `repaired to ${h.score}` : `a repair scored ${h.score} and was not used`).join(' → ');
+      const steps = (d.history || []).map((h: any) => h.step === 'drafts' ? `${h.scores.length} drafts scored ${h.scores.join(', ')}` : h.step === 'review' ? `reviewed: ${h.score}`
+        : h.step === 'repair' ? `repaired to ${h.score}` : h.step === 'repair rejected' ? `a repair was not used (${h.error})` : `${h.step} (${h.error})`).join(' → ');
       setDraftNote(`Drafted with ${d.model.replace(/^openrouter\//, '')}${d.reviewer ? `, reviewed by ${d.reviewer.replace(/^openrouter\//, '')}` : ''}. ${steps}. Dashed parts are suggestions: keep or delete them, then Save.`);
     } catch (e) { setErr(e instanceof Error && !('response' in e) ? e.message : errText(e)); }
     setBusy(''); setProgress('');

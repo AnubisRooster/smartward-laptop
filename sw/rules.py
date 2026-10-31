@@ -93,6 +93,26 @@ def _r_size(m):
     if len(m["parts"]) > 22: return f"{len(m['parts'])} parts"
     return True if not hubs else f"{', '.join(hubs)} connect{'s' if len(hubs) == 1 else ''} to too much"
 
+TYPE_FITS = [  # (what the part is, by name, the types that fit it)
+    (r"secret|vault|\bkms\b|key management|key vault", ("service", "datastore"), "a secrets manager is a service"),
+    (r"observab|monitor|tracing|telemetry|logging|metrics stack|langfuse|prometheus", ("service", "datastore"), "observability is a service"),
+    (r"control plane|orchestrat|scheduler", ("service", "infra"), "a control plane is a service"),
+    (r"\bstore\b|database|\bdb\b|vector|audit log|\bindex\b", ("datastore",), "a store is a data store"),
+    (r"router|gateway|\bproxy\b", ("gateway",), "a router or gateway is a gateway"),
+    (r"\bqueue\b|kafka|\bsqs\b", ("service", "datastore"), "a queue is a service"),
+]
+
+def _r_types(m):
+    bad = []
+    cloud = {p["id"] for p in cloud_parts(m)}
+    for p in m["parts"]:
+        name = p["label"].lower()
+        for rx, ok, why in (f for f in TYPE_FITS if re.search(f[0], name)):
+            if p["type"] not in ok: bad.append(f"{p['label']} is {p['type']} ({why})")
+            break
+        if p["id"] in cloud and p["type"] == "model": bad.append(f"{p['label']} is model (in a cloud zone it's an external API)")
+    return True if not bad else "; ".join(bad[:4])
+
 def _r_entry_auth(m):
     ids = find(m, IDENTITY)
     entries = {e["b"] for e in m["edges"] if by_id(m)[e["a"]]["type"] in ("actor", "app") and by_id(m)[e["b"]]["type"] not in ("datastore",)}
@@ -203,6 +223,7 @@ RULES = [
     ("C7", "correctness", 2, "Nothing floats", "A part with no connections is either missing its relationships or doesn't belong.", "Connect it or remove it.", C4, _r_connected),
     ("C8", "clarity", 1, "Everything has a place to run", "Where a part runs decides its trust boundary, cost and latency.", "Put each part under a [zone].", C4, _r_zones),
     ("C9", "clarity", 1, "Readable at a glance", "Past ~20 parts, or one part wired to everything, the diagram stops explaining.", "Split the hub, or draw a second, more detailed map.", C4, _r_size),
+    ("C10", "correctness", 2, "Each part has the type it is", "Shapes tell a reader what something is: a secrets manager drawn as infrastructure, or a cloud API drawn as a model you run, misleads.", "Change the type in brackets, e.g. '(service)', '(datastore)', '(external)'.", C4, _r_types),
     ("S1", "security", 3, "Every entry point is authenticated", "Zero trust: no request reaches an agent or model without identity and policy deciding first.", "Add an identity/policy part with control arrows to each entry point.", ZT, _r_entry_auth),
     ("S2", "security", 3, "Generated code runs in a sandbox", "An agent that writes and runs code can be steered by injected text; isolation contains the damage.", "Add a sandbox (gVisor, Firecracker, E2B) the agent runs code in, with no direct route to the cloud.", f"{OWASP_AGENT}; {OWASP_LLM} LLM05 Improper Output Handling", _r_sandbox),
     ("S3", "security", 2, "Secrets come from a secrets manager", "API keys for cloud models and tools must not live in agent configs or prompts.", "Add a secrets manager (Vault, AWS Secrets Manager, Azure Key Vault).", WAF, _r_secrets),
@@ -278,7 +299,12 @@ def score(m, project=None, overlay=None, review=None):
         roles = len(pat["roles"]) + sum(1 for rx, _ in pat["if"] if any(re.search(rx, _t(x)) for x in m["parts"]))
         parts["completeness"] = 100 * (roles - len(missing)) / max(1, roles)
     brief = [{"component": c, "present": present(c, m)} for c in brief_components(project or {})]
-    cons = (review or {}).get("constraints") or []
+    cons = [dict(c) for c in (review or {}).get("constraints") or []]
+    absent = [b["component"] for b in brief if not b["present"]]
+    for c in cons:                               # what code can check outranks what the reviewer says
+        t = c["text"].lower()
+        hit = [a for a in absent if _norm_words(a) <= _norm_words(t)] or (absent if re.search(r"\bcomponents?\b|\binclud", t) else [])
+        if c.get("met") and hit: c.update(met=False, why=f"SmartWard found it missing: {', '.join(hit)} (the reviewer said it was met)")
     if brief or cons:
         got = sum(1 for b in brief if b["present"]) * 2 + sum(1 for c in cons if c.get("met")); out_of = len(brief) * 2 + len(cons)
         parts["fidelity"] = 100 * got / out_of
