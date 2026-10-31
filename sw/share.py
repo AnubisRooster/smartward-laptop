@@ -85,7 +85,7 @@ def project_doc(pid):
         tone = {"threatens": ("Could undercut", "Red"), "accelerates": ("Could speed up", "Green"), "enables": ("Could open up", "Blue"), "news": ("Recent news", "Grey")}
         d.section("Where it lands on the stack", [{"lead": c["label"], "text": f"{o['development_count']} recent development{'s' if o['development_count'] != 1 else ''} ({o['measured']} measured)"
                                                    + (f"; implications: {'; '.join(h['headline'] for h in o['hypotheses'])}" if o["hypotheses"] else ""), "badges": [tone[o["tone"]]], "cite": []}
-                                                  for c in m["components"] for o in [m["overlay"][c["id"]]] if o["tone"] != "quiet"])
+                                                  for c in m["parts"] for o in [m["overlay"][c["id"]]] if o["tone"] != "quiet"])
     if not d.sections: raise LookupError("This project has no implications to share yet.")
     d.note = "Hypotheses from SmartWard, each with its evidence. Not conclusions: confidence is capped by what the evidence can bear."
     return d

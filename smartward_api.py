@@ -489,10 +489,8 @@ def map_put(pid: int, body: dict):
 
 @app.post("/api/projects/{pid}/map/preview")
 def map_preview(pid: int, body: dict):
-    """The diagram for lines you are still editing, with problems listed instead of refused. Nothing is saved."""
-    comps, edges, problems = maps.parse(str(body.get("text") or ""))
-    over = maps.overlay(pid, comps)
-    return {"components": comps, "edges": edges, "overlay": over, "mermaid": maps.mermaid(comps, edges, over), "problems": problems}
+    """The diagram, checks and match counts for lines you are still editing, with problems listed instead of refused. Nothing is saved."""
+    return maps.build(pid, str(body.get("text") or ""))
 
 @app.post("/api/projects/{pid}/map/draft")
 def map_draft(pid: int):
