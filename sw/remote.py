@@ -27,6 +27,7 @@ ALLOW = [
     _R("POST", r"/api/remote/logout"),
     _R("GET", r"/api/(watches|push/key)"), _R("POST", r"/api/watches"), _R("PUT", r"/api/watches/\d+"), _R("DELETE", r"/api/watches/\d+"),
     _R("POST", r"/api/push/(subscribe|unsubscribe|test)"),
+    _R("GET", r"/api/projects/\d+/map"),
     _R("GET", r"/api/(usage|models|openrouter/models)"), _R("POST", r"/api/models/test"), _R("PUT", r"/api/settings"),     # the phone's Settings: only the keys below
 ]
 

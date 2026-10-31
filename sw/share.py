@@ -4,7 +4,7 @@ storage format for the page source editor.
 Nothing here talks to the network or holds credentials: it only formats what is already in the library. Private material never goes in:
 a project with private links is refused outright, and a citation of a private article is left out (the page says how many were)."""
 import html, re, time
-from . import db, implications, memo
+from . import db, implications, maps, memo
 
 DIRECTION = {"accelerates": "Could speed this up", "threatens": "Could undercut part of this", "enables": "Could open something new", "neutral": "Worth knowing"}
 STANDING = {"supported": "Holding up so far", "contradicted": "Contradicted since", "open": "Still open"}
@@ -80,6 +80,12 @@ def project_doc(pid):
         return {"lead": h["headline"], "text": h["implication"], "badges": badges, "cite": d.cite(h["evidence"] + (st["supports"] if st else []), rows), "extra": extra}
     d.section("Accepted", [point(h) for h in hyps if h["status"] == "accepted"])
     d.section("Under review", [point(h) for h in hyps if h["status"] == "new"])
+    m = maps.view(pid)
+    if m:
+        tone = {"threatens": ("Could undercut", "Red"), "accelerates": ("Could speed up", "Green"), "enables": ("Could open up", "Blue"), "news": ("Recent news", "Grey")}
+        d.section("Where it lands on the stack", [{"lead": c["label"], "text": f"{o['development_count']} recent development{'s' if o['development_count'] != 1 else ''} ({o['measured']} measured)"
+                                                   + (f"; implications: {'; '.join(h['headline'] for h in o['hypotheses'])}" if o["hypotheses"] else ""), "badges": [tone[o["tone"]]], "cite": []}
+                                                  for c in m["components"] for o in [m["overlay"][c["id"]]] if o["tone"] != "quiet"])
     if not d.sections: raise LookupError("This project has no implications to share yet.")
     d.note = "Hypotheses from SmartWard, each with its evidence. Not conclusions: confidence is capped by what the evidence can bear."
     return d

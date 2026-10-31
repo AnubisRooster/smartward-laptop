@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS hypothesis_checks(id INTEGER PRIMARY KEY, hid INTEGER
 CREATE INDEX IF NOT EXISTS ix_hcheck ON hypothesis_checks(hid);
 CREATE TABLE IF NOT EXISTS watches(id INTEGER PRIMARY KEY, name TEXT, terms TEXT DEFAULT '[]', domains TEXT DEFAULT '[]', sources TEXT DEFAULT '[]', min_evidence TEXT DEFAULT 'any', enabled INTEGER DEFAULT 1, scanned REAL, last_hit REAL, created REAL);
 CREATE TABLE IF NOT EXISTS watch_hits(id INTEGER PRIMARY KEY, watch_id INTEGER, article_id INTEGER, dev_id INTEGER, ts REAL, notified INTEGER DEFAULT 0, UNIQUE(watch_id, article_id));
+CREATE TABLE IF NOT EXISTS project_maps(project_id INTEGER PRIMARY KEY, text TEXT, updated REAL, model TEXT);
 CREATE TABLE IF NOT EXISTS push_subs(id INTEGER PRIMARY KEY, endpoint TEXT UNIQUE, keys TEXT, label TEXT, created REAL, last_ok REAL, fails INTEGER DEFAULT 0);
 """
 

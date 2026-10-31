@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
-from sw import share as sharing, watches, push
+from sw import share as sharing, watches, push, maps
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -461,6 +461,30 @@ def share_export(kind: str, ident: int, format: str = "html", download: bool = F
     except LookupError as e: bad(str(e), 404)
     except ValueError as e: bad(str(e))
 
+# ---------- a project's stack map ----------
+@app.get("/api/projects/{pid}/map")
+def map_get(pid: int): return {"map": maps.view(pid)}
+
+@app.put("/api/projects/{pid}/map")
+def map_put(pid: int, body: dict):
+    try: return {"map": maps.save(pid, str(body.get("text") or ""), str(body.get("model") or "you")[:80])}
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e))
+
+@app.post("/api/projects/{pid}/map/preview")
+def map_preview(pid: int, body: dict):
+    """The diagram for lines you are still editing, with problems listed instead of refused. Nothing is saved."""
+    comps, edges, problems = maps.parse(str(body.get("text") or ""))
+    over = maps.overlay(pid, comps)
+    return {"components": comps, "edges": edges, "overlay": over, "mermaid": maps.mermaid(comps, edges, over), "problems": problems}
+
+@app.post("/api/projects/{pid}/map/draft")
+def map_draft(pid: int):
+    try: return maps.draft(pid)
+    except LookupError as e: bad(str(e), 404)
+    except llm.Unavailable as e: bad(str(e)[:240] + " (try again in a minute)", 503)
+    except ValueError as e: bad(str(e))
+
 # ---------- watches, and phone notifications for them ----------
 @app.get("/api/watches")
 def watches_list(): return {"watches": watches.listing()}
@@ -581,7 +605,7 @@ def project_put(pid: int, body: dict):
 @app.delete("/api/projects/{pid}")
 def project_del(pid: int):
     db.x("DELETE FROM hypothesis_checks WHERE hid IN (SELECT id FROM hypotheses WHERE project_id=?)", (pid,))
-    for t in ("items", "project_links", "brief_history", "hypotheses"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
+    for t in ("items", "project_links", "brief_history", "hypotheses", "project_maps"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
     db.x("DELETE FROM projects WHERE id=?", (pid,)); return {"ok": True}
 @app.post("/api/projects/{pid}/suggest")
 def project_suggest(pid: int):
@@ -735,7 +759,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}

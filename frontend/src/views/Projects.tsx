@@ -5,6 +5,7 @@ import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Spin, Title, cx }
 import { ask, toast } from '../feedback';
 import { AddSource } from './Sources';
 import ShareButtons from './ShareButtons';
+import ProjectMap from './ProjectMap';
 
 export default function Projects() {
   const { projectId, go } = useNav();
@@ -80,6 +81,8 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
         <form className="mt-2 flex gap-2" onSubmit={e => { e.preventDefault(); if (link.trim()) run(async () => { await post(`/projects/${id}/links`, { url: link }); setLink(''); }); }}>
           <input className={inputCls} value={link} onChange={e => setLink(e.target.value)} placeholder="https://… or https://github.com/owner/repo" /><Btn type="submit">Add link</Btn></form>
         <div className="mt-1 text-xs text-zinc-500">GitHub links sync docs and manifests read-only; SmartWard never writes back. Private repo content stays on this device. For private repos add a token in Settings.</div></Card>
+
+      <ProjectMap pid={id} />
 
       <Implications pid={id} onAccepted={() => { reload(); onChanged(); }} />
 
