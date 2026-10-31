@@ -356,6 +356,7 @@ def shared_words(m):
 # ---------- the reviewer: a second model, a fixed rubric ----------
 def _review_prompt(m, project):
     return ("You review an architecture diagram written as lines (Part (type): words; [Zone]; A -> B: what flows (protocol); A => B: control). "
+            "'X -> <infra part>: runs on' means X is hosted on that infrastructure; it is the correct way to show hosting, not a data flow error, and needs no protocol. "
             "Answer ONLY these three questions as JSON; do not suggest new parts or rules:\n"
             '{"implausible":[{"from":"part","to":"part","why":"short"}],"bad_protocols":[{"from":"part","to":"part","why":"short"}],'
             '"constraints":[{"text":"a requirement stated in the brief","met":true,"why":"short"}],'
@@ -370,10 +371,13 @@ def _review_prompt(m, project):
 
 def _clean_review(raw, m):
     labels = {p["label"].lower(): p["label"] for p in m["parts"]}
+    names = {p["id"]: p["label"].lower() for p in m["parts"]}; infra = {p["id"] for p in m["parts"] if p["type"] == "infra"}
+    hosting = {(names[e["a"]], names[e["b"]]) for e in m["edges"] if e["b"] in infra and re.match(r"runs? on\b", e["verb"].lower())}   # the format's way to show hosting
     def pairs(xs):
         out = []
         for x in (xs or [])[:10]:
-            if isinstance(x, dict) and str(x.get("from", "")).lower() in labels and str(x.get("to", "")).lower() in labels:
+            if isinstance(x, dict) and str(x.get("from", "")).lower() in labels and str(x.get("to", "")).lower() in labels \
+                    and (str(x["from"]).lower(), str(x["to"]).lower()) not in hosting:
                 out.append({"from": labels[x["from"].lower()], "to": labels[x["to"].lower()], "why": _clean(x.get("why"), 160)})
         return out
     if not isinstance(raw, dict): raise ValueError("The reviewer gave no usable answer.")

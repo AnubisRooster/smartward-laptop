@@ -168,6 +168,12 @@ class FromTheRealDraft(unittest.TestCase):
         text = GOOD.replace("Tool registry (datastore): mcp, tool registry", "Tool registry (datastore): mcp, tool registry, hybrid routing")
         self.assertNotIn("O1", failed(text)); self.assertNotIn("O3", failed(text))
 
+    def test_runs_on_arrows_are_hosting_whatever_the_reviewer_says(self):
+        m = maps.parse(GOOD); self.assertIn("runs on", maps._review_prompt(m, {"name": "P"}))
+        rev = maps._clean_review({"implausible": [{"from": "vLLM serving", "to": "GPUs", "why": "runs on is not a data flow"},
+                                                  {"from": "Coding agent", "to": "Harness", "why": "x"}]}, m)
+        self.assertEqual([(x["from"], x["to"]) for x in rev["implausible"]], [("Coding agent", "Harness")])
+
     def test_unreviewed_evidence_counts_for_less(self):
         m = maps.parse(GOOD); over = {p["id"]: {"development_count": 1} for p in m["parts"]}
         self.assertEqual(rules.score(m, None, over)["parts"]["evidence"], 60)
