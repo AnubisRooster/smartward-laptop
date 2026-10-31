@@ -3,6 +3,7 @@ import { hashFor, parseHash, HOME } from '../nav';
 import { resolveTheme } from '../theme';
 import { step, tabForKey, isTyping } from '../shortcuts';
 import { chunkForSpeech, sameData } from '../hooks';
+import { pngSize, standaloneSvg } from '../mapImage';
 
 describe('address <-> place', () => {
   it('round-trips every kind of place', () => {
@@ -228,5 +229,21 @@ describe('phone notifications', () => {
     expect(needsHomeScreen('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', false)).toBe(true);
     expect(needsHomeScreen('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', true)).toBe(false);
     expect(needsHomeScreen('Mozilla/5.0 (Linux; Android 15; moto g)', false)).toBe(false);
+  });
+});
+
+describe('architecture image files', () => {
+  const MERMAID = '<svg id="m" width="100%" xmlns="http://www.w3.org/2000/svg" style="max-width: 812.5px;" viewBox="-8 -8 812.5 400.2" role="graphics-document"><g/></svg>';
+  it('gives the SVG a real size and a white background', () => {
+    const r = standaloneSvg(MERMAID);
+    expect([r.width, r.height]).toEqual([813, 401]);
+    expect(r.svg).toContain('width="813" height="401"'); expect(r.svg).not.toContain('100%'); expect(r.svg).not.toContain('max-width');
+    expect(r.svg).toContain('<rect x="-8" y="-8" width="812.5" height="400.2" fill="#ffffff"/><g/>');
+    expect(r.svg.match(/xmlns=/g)?.length).toBe(1);
+  });
+  it('refuses a drawing with no size', () => { expect(() => standaloneSvg('<svg><g/></svg>')).toThrow(); });
+  it('draws the PNG at twice the size, held under the canvas limit', () => {
+    expect(pngSize(800, 400)).toEqual({ width: 1600, height: 800 });
+    expect(pngSize(6000, 1000)).toEqual({ width: 8192, height: 1365 });
   });
 });

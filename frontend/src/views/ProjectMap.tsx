@@ -3,6 +3,8 @@ import { errText, get, post, put } from '../api';
 import { onPhone } from '../device';
 import { ask, toast } from '../feedback';
 import { useLoad, useNav } from '../hooks';
+import { lightSvg, svgToPng } from '../mapImage';
+import { saveFile } from '../saveFile';
 import { Badge, Btn, Card, Err, inputCls } from '../ui';
 import { TestThis } from './Bench';
 
@@ -94,6 +96,39 @@ function Matches({ map }: { map: any }) {
 }
 
 /** The project's architecture as a diagram, with recent developments and implications placed on the part they mention. */
+const FILES: [string, string, string][] = [['png', 'Image (.png)', 'for slides, email and chat'], ['svg', 'Vector image (.svg)', 'sharp at any size'],
+  ['drawio', 'draw.io (.drawio)', 'editable in diagrams.net or draw.io for Confluence'], ['mermaid', 'Mermaid (.mmd)', 'for GitHub, Confluence or Notion'], ['text', 'Map text (.txt)', 'to restore or share the lines']];
+
+/** Downloads of the saved map. Images are drawn here in the light theme, without the evidence counts; the other formats come from the API. */
+function MapDownload({ pid }: { pid: number }) {
+  const [open, setOpen] = useState(false); const [busy, setBusy] = useState('');
+  const take = async (f: string) => {
+    setOpen(false); setBusy(f);
+    try {
+      let name: string, blob: Blob;
+      if (f === 'png' || f === 'svg') {
+        const src = await get(`/projects/${pid}/map/export`, { format: 'mermaid' });
+        const img = await lightSvg(src.content, `project-map-file-${++seq}`);
+        name = src.filename.replace(/\.mmd$/, '.' + f);
+        blob = f === 'svg' ? new Blob([img.svg], { type: 'image/svg+xml' }) : await svgToPng(img.svg, img.width, img.height);
+      } else {
+        const r = await get(`/projects/${pid}/map/export`, { format: f }); name = r.filename; blob = new Blob([r.content], { type: r.type });
+      }
+      toast.ok('Saved to ' + await saveFile(name, blob));
+    } catch (e) { toast.error(e instanceof Error && !('response' in e) ? e.message : errText(e)); }
+    setBusy('');
+  };
+  return (
+    <span className="relative">
+      <Btn small onClick={() => setOpen(!open)} loading={!!busy} label="Download the architecture">⤓ Download</Btn>
+      {open && <span className="absolute right-0 z-20 mt-1 flex w-72 flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-sm shadow-lg" onMouseLeave={() => setOpen(false)}>
+        {FILES.map(([f, label, why]) => <button key={f} className="rounded px-2 py-1.5 text-left hover:bg-zinc-800" onClick={() => take(f)}>{label} <span className="text-xs text-zinc-500">{why}</span></button>)}
+        <span className="px-2 pb-1 pt-0.5 text-[11px] text-zinc-500">The saved version, without the evidence counts. Unsaved edits aren’t included.</span>
+      </span>}
+    </span>
+  );
+}
+
 export default function ProjectMap({ pid }: { pid: number }) {
   const { data, reload } = useLoad<any>(`/projects/${pid}/map`);
   const { openArticle } = useNav();
@@ -155,10 +190,6 @@ export default function ProjectMap({ pid }: { pid: number }) {
     get(`/projects/${pid}/map/draft/status`).then(st => { if (st.running || st.result || st.error) follow(); }).catch(() => {});
   }, [pid]);
   const save = async () => { setBusy('save'); setErr(''); try { await put(`/projects/${pid}/map`, { text: editing }); setEditing(null); setPreview(null); setDraftNote(''); reload(); } catch (e) { setErr(errText(e)); } setBusy(''); };
-  const download = () => {
-    const svg = box.current?.querySelector('svg'); if (!svg) return;
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([svg.outerHTML], { type: 'image/svg+xml' })); a.download = 'architecture.svg'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  };
   const part = map?.parts?.find((c: any) => c.id === picked); const over = picked ? map?.overlay?.[picked] : null;
   const label = (id: string) => map?.parts?.find((c: any) => c.id === id)?.label || id;
   const links = part ? map.edges.filter((e: any) => e.a === part.id || e.b === part.id) : [];
@@ -167,9 +198,10 @@ export default function ProjectMap({ pid }: { pid: number }) {
     <Card className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-medium">Architecture</h2>
         <div className="text-xs text-zinc-500">The project’s parts, where they run and what flows between them, with recent developments and implications placed on the part they mention. Click a part.</div></div>
-        {!onPhone && editing === null && <div className="flex flex-wrap gap-2">
-          {data?.map && <><Btn small onClick={download}>⤓ SVG</Btn><Btn small onClick={draft} loading={busy === 'draft'}>Redraft</Btn><Btn small onClick={() => { setEditing(data.map.text); setPicked(null); }}>Edit</Btn></>}
-          {!data?.map && <><Btn small kind="primary" onClick={draft} loading={busy === 'draft'}>Draft it for me</Btn><Btn small onClick={() => setEditing(EXAMPLE)}>Write it myself</Btn></>}</div>}
+        {editing === null && <div className="flex flex-wrap gap-2">
+          {data?.map && <MapDownload pid={pid} />}
+          {!onPhone && data?.map && <><Btn small onClick={draft} loading={busy === 'draft'}>Redraft</Btn><Btn small onClick={() => { setEditing(data.map.text); setPicked(null); }}>Edit</Btn></>}
+          {!onPhone && !data?.map && <><Btn small kind="primary" onClick={draft} loading={busy === 'draft'}>Draft it for me</Btn><Btn small onClick={() => setEditing(EXAMPLE)}>Write it myself</Btn></>}</div>}
       </div>
       <Err>{err}</Err>
       {busy === 'draft' && <p className="text-xs text-zinc-400" role="status">Drafting three versions, scoring them against the best-practice rules, having a second model review the best one, and repairing it up to twice. Free models can take 10 minutes or more; you can leave this page and come back.<br /><span className="text-zinc-300">{progress}</span></p>}

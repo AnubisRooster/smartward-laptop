@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
-from sw import share as sharing, watches, push, maps, bench, sandbox
+from sw import share as sharing, watches, push, maps, mapexport, bench, sandbox
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=sorted(remote.LOCAL_ORIGINS), allow_methods=["*"], allow_headers=["*"])
@@ -480,6 +480,24 @@ def share_export(kind: str, ident: int, format: str = "html", download: bool = F
 # ---------- a project's stack map ----------
 @app.get("/api/projects/{pid}/map")
 def map_get(pid: int): return {"map": maps.view(pid)}
+
+@app.get("/api/projects/{pid}/map/export")
+def map_export(pid: int, format: str = "drawio", download: bool = False):
+    """The saved map as a draw.io file, Mermaid source or the map text (the PNG and SVG are drawn by the browser)."""
+    try: r = mapexport.export(pid, format)
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e))
+    if not download: return r
+    return Response(r["content"], media_type=r["type"] + "; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'})
+
+@app.post("/api/downloads")
+def save_download(body: dict):
+    """Saves a file the desktop window made into ~/Downloads (its web view ignores browser downloads). Laptop only: a phone can't write files here."""
+    try:
+        data = base64.b64decode(body["base64"], validate=True) if body.get("base64") else str(body.get("text") or "").encode()
+        return {"path": mapexport.save_download(body.get("filename"), data)}
+    except (ValueError, KeyError) as e: bad(str(e) or "That file couldn't be saved.")
+    except OSError as e: bad(f"Couldn't save the file: {e.strerror or e}", 500)
 
 @app.put("/api/projects/{pid}/map")
 def map_put(pid: int, body: dict):
