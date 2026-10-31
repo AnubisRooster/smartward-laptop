@@ -13,6 +13,11 @@ SESSION_SECONDS = 30 * 86400
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "testserver"}
 FORWARDED = ("x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "forwarded", "tailscale-user-login")
 SAFE = ("GET", "HEAD", "OPTIONS")
+# The pages allowed to call the API from this computer: the app's own window (served by the API), the Vite dev server, and Tauri's own pages.
+# Any other web page open in a browser on this laptop is refused, so it can't read the library or change anything.
+LOCAL_ORIGINS = frozenset({"http://127.0.0.1:8000", "http://localhost:8000", "http://[::1]:8000", "http://localhost:1420", "http://127.0.0.1:1420",
+                           "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"})
+OPEN_TO_WEB = {"/api/share"}          # "Add to SmartWard" from any page you're reading: it only saves that page
 
 # What a signed-in phone may do. Everything else is refused: settings and keys, backups and exports, erasing, the app lock,
 # changing sources, and the laptop's own microphone.
@@ -148,12 +153,21 @@ def clear_failures():
     with _lock: _fails.clear(); _locked_until[0] = 0.0
 
 
+def from_other_site(headers):
+    """Whether a browser sent this on behalf of some other web page (not SmartWard's own window)."""
+    origin = (headers.get("origin") or "").rstrip("/").lower()
+    if origin: return origin not in LOCAL_ORIGINS
+    return (headers.get("sec-fetch-site") or "").lower() == "cross-site"
+
+
 # ---- the decision ----
 def decide(method, path, headers, cookie=None):
     """None to let the request through, or (status, message) to refuse it."""
     host = host_of(headers)
     if not is_remote(headers):
-        return None if host in LOCAL_HOSTS else (400, "Unexpected host name.")
+        if host not in LOCAL_HOSTS: return (400, "Unexpected host name.")
+        if path.startswith("/api/") and path not in OPEN_TO_WEB and from_other_site(headers): return (403, "Requests from other websites aren't allowed.")
+        return None
     if not enabled(): return (403, "Remote access is turned off on this computer.")
     if not host_ok(host): return (403, "Unexpected host name.")
     want = (db.get_setting("remote_login") or "").strip().lower()

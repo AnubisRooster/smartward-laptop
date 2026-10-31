@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS watches(id INTEGER PRIMARY KEY, name TEXT, terms TEXT
 CREATE TABLE IF NOT EXISTS watch_hits(id INTEGER PRIMARY KEY, watch_id INTEGER, article_id INTEGER, dev_id INTEGER, ts REAL, notified INTEGER DEFAULT 0, UNIQUE(watch_id, article_id));
 CREATE TABLE IF NOT EXISTS project_maps(project_id INTEGER PRIMARY KEY, text TEXT, updated REAL, model TEXT);
 CREATE TABLE IF NOT EXISTS bench_runs(id INTEGER PRIMARY KEY, development_id INTEGER, plan TEXT, script TEXT, status TEXT, result TEXT, log TEXT, error TEXT, result_dev_id INTEGER, created REAL, started REAL, finished REAL, model TEXT);
+CREATE TABLE IF NOT EXISTS removed_sources(id INTEGER PRIMARY KEY, source_id INTEGER, name TEXT, data TEXT, articles INTEGER, via TEXT, ts REAL, restored REAL);
 CREATE TABLE IF NOT EXISTS push_subs(id INTEGER PRIMARY KEY, endpoint TEXT UNIQUE, keys TEXT, label TEXT, created REAL, last_ok REAL, fails INTEGER DEFAULT 0);
 """
 

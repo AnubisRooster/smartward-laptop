@@ -1,5 +1,5 @@
 """Source fetchers: RSS/Atom, arXiv, Hugging Face papers, Hacker News, GitHub releases, watched web pages."""
-import hashlib, re, threading, time, urllib.robotparser
+import hashlib, json, re, threading, time, urllib.robotparser
 from calendar import timegm
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode, urljoin
@@ -253,7 +253,9 @@ def add_source(kind, name=None, url=None, query=None, project_id=None, system=0)
     refresh_source(sid)
     s = db.q("SELECT * FROM sources WHERE id=?", (sid,), one=True)
     if s["last_status"] == "error":
-        err = s["last_error"]; db.x("DELETE FROM sources WHERE id=?", (sid,)); raise FetchError(err)
+        err = s["last_error"]
+        db.x("DELETE FROM articles WHERE source_id=? AND stage='new'", (sid,))          # anything saved before the error went with the source it came from
+        db.x("DELETE FROM sources WHERE id=?", (sid,)); raise FetchError(err)
     if kind == "rss" and not name:
         try:
             r = get(s["url"]); root = etree.fromstring(r.content, parser=etree.XMLParser(recover=True))
@@ -272,3 +274,31 @@ def add_page_as_article(url, source_name="Read in chat", project_id=None):
     aid = db.x("INSERT INTO articles(source_id,url,title,published,teaser,text,full_text,created,project_id) VALUES(?,?,?,?,?,?,1,?,?)",
                (sid, u, title or u, db.now(), text[:600], text, db.now(), project_id))
     return aid, text
+
+
+# ---------- removing a source, with a record and a way back ----------
+def remove_source(sid, via=""):
+    """Stop following a source. Its articles stay (hidden from Reading); the source is kept in removed_sources so it can be restored,
+    with when and from where it was removed."""
+    s = db.q("SELECT * FROM sources WHERE id=?", (sid,), one=True)
+    if not s: return None
+    n = db.q("SELECT COUNT(*) n FROM articles WHERE source_id=?", (sid,), one=True)["n"]
+    rid = db.x("INSERT INTO removed_sources(source_id,name,data,articles,via,ts) VALUES(?,?,?,?,?,?)", (sid, s["name"], json.dumps(s), n, (via or "")[:200], db.now()))
+    db.x("DELETE FROM sources WHERE id=?", (sid,))
+    print(f"source removed: {sid} {s['name']!r} ({n} articles) via {via}", flush=True)
+    return rid
+
+
+def removed(limit=30): return db.q("SELECT id,source_id,name,articles,via,ts,restored FROM removed_sources ORDER BY ts DESC LIMIT ?", (limit,))
+
+
+def restore_removed(rid):
+    """Bring a removed source back under its old id, so its articles are its own again."""
+    r = db.q("SELECT * FROM removed_sources WHERE id=?", (rid,), one=True)
+    if not r: raise LookupError("Nothing to restore.")
+    if r["restored"]: raise ValueError("Already restored.")
+    data = json.loads(r["data"]); cols = [c for c in data if c != "n"]
+    if db.q("SELECT 1 FROM sources WHERE id=?", (data["id"],), one=True): raise ValueError("A source with that number exists again.")
+    db.x(f"INSERT INTO sources({','.join(cols)}) VALUES({','.join('?' * len(cols))})", [data[c] for c in cols])
+    db.x("UPDATE removed_sources SET restored=? WHERE id=?", (db.now(), rid))
+    return data["id"]

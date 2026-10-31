@@ -10,16 +10,20 @@ from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, s
 from sw import share as sharing, watches, push, maps, bench, sandbox
 
 app = FastAPI(title="SmartWard")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=sorted(remote.LOCAL_ORIGINS), allow_methods=["*"], allow_headers=["*"])
+_OPEN_CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST", "Access-Control-Allow-Headers": "content-type", "Access-Control-Allow-Private-Network": "true"}
 
 @app.middleware("http")
 async def front_door(request: Request, call_next):
     """Phones come through Tailscale Serve; they sign in and may only use what sw/remote.py allows. Local use is unchanged."""
+    open_to_web = request.url.path in remote.OPEN_TO_WEB and not remote.is_remote(request.headers)
+    if open_to_web and request.method == "OPTIONS": return Response(status_code=204, headers=_OPEN_CORS)     # the bookmarklet's preflight, from any page
     refusal = remote.decide(request.method, request.url.path, request.headers, request.cookies.get(remote.COOKIE))
     if refusal:
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": refusal[1], "remote_auth": refusal[0] == 401}, status_code=refusal[0], headers={"Cache-Control": "no-store"})
     resp = await call_next(request)
+    if open_to_web: resp.headers.update(_OPEN_CORS)
     path = request.url.path
     if path.startswith("/api/"):
         if remote.is_remote(request.headers): resp.headers["Cache-Control"] = "no-store"
@@ -118,8 +122,20 @@ def new_source(s: SourceIn):
     except sources.FetchError as e: bad(str(e))
     bg(pipeline.run); return {"id": sid}
 @app.delete("/api/sources/{sid}")
-def del_source(sid: int):
-    db.x("DELETE FROM sources WHERE id=?", (sid,)); return {"ok": True}
+def del_source(sid: int, request: Request):
+    h = request.headers
+    via = "phone" if remote.is_remote(h) else "this laptop"
+    via += f" · {h.get('origin') or 'no origin'} · {(h.get('user-agent') or '')[:80]}"
+    sources.remove_source(sid, via); return {"ok": True}
+
+@app.get("/api/sources/removed")
+def sources_removed(): return {"removed": sources.removed()}
+
+@app.post("/api/sources/removed/{rid}/restore")
+def source_restore(rid: int):
+    try: return {"id": sources.restore_removed(rid)}
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e), 409)
 @app.post("/api/sources/{sid}/refresh")
 def refresh_one(sid: int):
     n = sources.refresh_source(sid); bg(pipeline.run); return {"added": n}
@@ -799,7 +815,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps", "bench_runs"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps", "bench_runs", "removed_sources"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}

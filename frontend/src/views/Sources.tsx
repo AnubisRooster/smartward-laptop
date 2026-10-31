@@ -31,8 +31,25 @@ export default function Sources({ onClose }: { onClose: () => void }) {
           <div className="flex shrink-0 gap-1">{s.last_status === 'error' && <Btn small onClick={() => retry(s.id)} disabled={busy === s.id}>{busy === s.id ? <Spin /> : 'Retry'}</Btn>}
             <Btn small onClick={async () => { await patch(`/sources/${s.id}`, { enabled: s.enabled ? 0 : 1 }); reload(); }}>{s.enabled ? 'Pause' : 'Resume'}</Btn>
             <Btn small kind="danger" onClick={async () => { if (await ask.confirm({ title: `Stop following “${s.name}”?`, body: 'Its articles are removed from Reading.', confirmLabel: 'Remove', danger: true })) { try { await del(`/sources/${s.id}`); toast.ok(`Removed “${s.name}”.`); } catch (e) { toast.error(errText(e)); } reload(); } }}>Remove</Btn></div></div></Card>))}</div>
+      <Removed onRestored={reload} />
       {adding && <AddSource onClose={() => { setAdding(false); reload(); }} />}
     </div></div>
+  );
+}
+
+/** Sources removed lately, with when and from where, and a way to bring each back with its articles. */
+function Removed({ onRestored }: { onRestored: () => void }) {
+  const { data, reload } = useLoad<any>('/sources/removed');
+  const rows: any[] = (data?.removed || []).filter((r: any) => !r.restored);
+  if (!rows.length) return null;
+  const restore = async (r: any) => { try { await post(`/sources/removed/${r.id}/restore`); toast.ok(`Restored “${r.name}”.`); reload(); onRestored(); } catch (e) { toast.error(errText(e)); } };
+  return (
+    <details className="mt-4"><summary className="cursor-pointer text-sm text-zinc-400">Recently removed ({rows.length})</summary>
+      <ul className="mt-2 space-y-1.5">{rows.map(r => (
+        <li key={r.id} className="flex items-center gap-2 rounded-lg border border-zinc-800 p-2 text-sm"><div className="min-w-0 flex-1"><div className="truncate">{r.name}</div>
+          <div className="truncate text-xs text-zinc-500">removed {ago(r.ts)} · {r.articles} articles kept{r.via ? ` · from ${r.via}` : ''}</div></div>
+          <Btn small onClick={() => restore(r)}>Restore</Btn></li>))}</ul>
+    </details>
   );
 }
 
