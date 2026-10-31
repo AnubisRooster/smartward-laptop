@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { errText, get, post, put } from '../api';
-import { onPhone } from '../device';
+import { onPhone, useSheet } from '../device';
 import { ask, toast } from '../feedback';
 import { useLoad, useNav } from '../hooks';
 import { lightSvg, svgToPng } from '../mapImage';
 import { saveFile } from '../saveFile';
-import { Badge, Btn, Card, Err, inputCls } from '../ui';
+import { Badge, Btn, Card, Err, Modal, inputCls } from '../ui';
 import { TestThis } from './Bench';
 
 const TONE: Record<string, [string, 'red' | 'green' | 'indigo' | 'zinc']> = { threatens: ['Could undercut', 'red'], accelerates: ['Could speed up', 'green'], enables: ['Could open up', 'indigo'], news: ['Recent news', 'zinc'], quiet: ['Quiet', 'zinc'] };
@@ -101,7 +101,7 @@ const FILES: [string, string, string][] = [['png', 'Image (.png)', 'for slides, 
 
 /** Downloads of the saved map. Images are drawn here in the light theme, without the evidence counts; the other formats come from the API. */
 function MapDownload({ pid }: { pid: number }) {
-  const [open, setOpen] = useState(false); const [busy, setBusy] = useState('');
+  const [open, setOpen] = useState(false); const [busy, setBusy] = useState(''); const sheet = useSheet();
   const take = async (f: string) => {
     setOpen(false); setBusy(f);
     try {
@@ -118,12 +118,18 @@ function MapDownload({ pid }: { pid: number }) {
     } catch (e) { toast.error(e instanceof Error && !('response' in e) ? e.message : errText(e)); }
     setBusy('');
   };
+  const note = 'The saved version, without the evidence counts. Unsaved edits aren’t included.';
+  const btn = <Btn small onClick={() => setOpen(!open)} loading={!!busy} label="Download the architecture">⤓ Download</Btn>;
+  if (sheet && open) return <>{btn}<Modal title="Download the architecture" onClose={() => setOpen(false)}>
+    <div className="flex flex-col gap-2">{FILES.map(([f, label, why]) => <button key={f} className="rounded-lg border border-zinc-700 px-3 py-3 text-left hover:bg-zinc-800" onClick={() => take(f)}>
+      <div className="text-sm">{label}</div><div className="text-xs text-zinc-500">{why}</div></button>)}</div>
+    <p className="mt-3 text-xs text-zinc-500">{note}</p></Modal></>;
   return (
     <span className="relative">
-      <Btn small onClick={() => setOpen(!open)} loading={!!busy} label="Download the architecture">⤓ Download</Btn>
+      {btn}
       {open && <span className="absolute right-0 z-20 mt-1 flex w-72 flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-sm shadow-lg" onMouseLeave={() => setOpen(false)}>
         {FILES.map(([f, label, why]) => <button key={f} className="rounded px-2 py-1.5 text-left hover:bg-zinc-800" onClick={() => take(f)}>{label} <span className="text-xs text-zinc-500">{why}</span></button>)}
-        <span className="px-2 pb-1 pt-0.5 text-[11px] text-zinc-500">The saved version, without the evidence counts. Unsaved edits aren’t included.</span>
+        <span className="px-2 pb-1 pt-0.5 text-[11px] text-zinc-500">{note}</span>
       </span>}
     </span>
   );

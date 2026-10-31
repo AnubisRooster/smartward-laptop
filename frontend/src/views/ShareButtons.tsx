@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { BASE, errText, get } from '../api';
 import { toast } from '../feedback';
+import { useSheet } from '../device';
 import { Btn, Modal, inputCls } from '../ui';
+
+const FORMATS = [['markdown', 'Markdown (.md)'], ['html', 'Web page (.html)'], ['confluence', 'Confluence source (.xml)']] as const;
 
 /** "Copy for Confluence" and downloads for a memo or a project's implications. Private material is left out by the server. */
 export default function ShareButtons({ kind, id }: { kind: 'memo' | 'project'; id: number }) {
-  const [fallback, setFallback] = useState(''); const [open, setOpen] = useState(false);
+  const [fallback, setFallback] = useState(''); const [open, setOpen] = useState(false); const sheet = useSheet();
   const url = (format: string) => `${BASE}/api/export/share/${kind}/${id}?format=${format}&download=true`;
   const copy = async () => {
     // The clipboard is written in the same moment as the click (WebKit refuses it once the click is "used up" by a wait), with the text
@@ -26,8 +29,12 @@ export default function ShareButtons({ kind, id }: { kind: 'memo' | 'project'; i
       <Btn small onClick={copy} title="Copies a formatted version for a Confluence page; private material is never included">Copy for Confluence</Btn>
       <span className="relative">
         <Btn small onClick={() => setOpen(!open)} label="Download">⤓</Btn>
-        {open && <span className="absolute right-0 z-20 mt-1 flex w-56 flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-sm shadow-lg" onMouseLeave={() => setOpen(false)}>
-          {([['markdown', 'Markdown (.md)'], ['html', 'Web page (.html)'], ['confluence', 'Confluence source (.xml)']] as const).map(([f, label]) =>
+        {open && sheet && <Modal title="Download" onClose={() => setOpen(false)}>
+          <div className="flex flex-col gap-2">{FORMATS.map(([f, label]) =>
+            <a key={f} className="rounded-lg border border-zinc-700 px-3 py-3 text-sm hover:bg-zinc-800" href={url(f)} download onClick={() => setOpen(false)}>{label}</a>)}</div>
+          <p className="mt-3 text-xs text-zinc-500">Confluence source goes in the page’s source editor (Insert → Markup).</p></Modal>}
+        {open && !sheet && <span className="absolute right-0 z-20 mt-1 flex w-56 flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-sm shadow-lg" onMouseLeave={() => setOpen(false)}>
+          {FORMATS.map(([f, label]) =>
             <a key={f} className="rounded px-2 py-1.5 hover:bg-zinc-800" href={url(f)} download onClick={() => setOpen(false)}>{label}</a>)}
           <span className="px-2 pb-1 pt-0.5 text-[11px] text-zinc-500">Confluence source goes in the page’s source editor (Insert → Markup).</span>
         </span>}
