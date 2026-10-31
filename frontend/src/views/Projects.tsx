@@ -40,11 +40,24 @@ function NewProject({ onClose, onCreated }: { onClose: () => void; onCreated: (i
     <div className="flex justify-end gap-2"><Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" disabled={!name.trim()} onClick={go}>Create</Btn></div></div></Modal>;
 }
 
+const ITEMS_OPEN = 'sw.project.items.open';     // whether "Decisions, questions & actions" is open, for every project
+
+/** An item's text, cut to three lines when it is long (saved architecture copies run to pages), with Show all / Show less. */
+function ItemText({ text, done }: { text: string; done: boolean }) {
+  const [all, setAll] = useState(false);
+  const long = text.length > 280 || text.split('\n').length > 3;
+  return <div className={cx('min-w-0 flex-1 text-sm', done && 'text-zinc-500 line-through')}>
+    <div className={cx('whitespace-pre-wrap break-words', long && !all && 'line-clamp-3')}>{text}</div>
+    {long && <button className="text-xs text-indigo-300 hover:underline" onClick={() => setAll(!all)}>{all ? 'Show less' : 'Show all'}</button>}</div>;
+}
+
 function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; onChanged: () => void }) {
   const { data: p, error, reload } = useLoad<any>(`/projects/${id}`, undefined, 7000);
   const { go, openArticle } = useNav();
   const [editing, setEditing] = useState(false); const [brief, setBrief] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const [newItem, setNewItem] = useState({ kind: 'action', text: '' }); const [link, setLink] = useState(''); const [addSrc, setAddSrc] = useState(false); const [hist, setHist] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(() => { try { return localStorage.getItem(ITEMS_OPEN) !== '0'; } catch { return true; } });
+  const showItems = (v: boolean) => { setItemsOpen(v); try { localStorage.setItem(ITEMS_OPEN, v ? '1' : '0'); } catch { /* the choice just isn't remembered */ } };
   if (error) return <div className="p-4"><Err>{error}</Err></div>;
   if (!p) return <div className="p-6"><Spin /></div>;
   const run = async (fn: () => Promise<any>) => { setErr(''); setBusy(true); try { await fn(); await reload(); onChanged(); } catch (e) { setErr(errText(e)); } setBusy(false); };
@@ -66,14 +79,17 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
           <div className="flex gap-2"><Btn small kind="primary" onClick={() => run(() => post(`/projects/${id}/suggestion/accept`))}>Accept</Btn><Btn small onClick={() => run(() => post(`/projects/${id}/suggestion/reject`))}>Reject</Btn></div></div>}
       </Card>
 
-      <Card><h2 className="mb-2 font-medium">Decisions, questions & actions</h2>
+      <Card><button className="flex w-full items-center gap-2 text-left" aria-expanded={itemsOpen} onClick={() => showItems(!itemsOpen)}>
+          <span className={cx('text-xs text-zinc-500 transition-transform', itemsOpen && 'rotate-90')}>▶</span><h2 className="font-medium">Decisions, questions & actions</h2>
+          {!itemsOpen && <span className="ml-auto text-xs text-zinc-500">{['decision', 'question', 'action'].map(k => `${p.items.filter((i: any) => i.kind === k && !i.done).length} ${KIND[k].toLowerCase()}`).join(' · ')}</span>}</button>
+        {itemsOpen && <div className="mt-2">
         {['decision', 'question', 'action'].map(k => { const its = p.items.filter((i: any) => i.kind === k); return its.length > 0 && (
           <div key={k} className="mb-3"><div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">{KIND[k]}</div>
             {its.map((i: any) => (<div key={i.id} className="group flex items-start gap-2 py-0.5"><input type="checkbox" aria-label={`${k}: ${i.text}`} className="mt-1" checked={!!i.done} onChange={() => run(() => patch(`/items/${i.id}`, { done: !i.done }))} />
-              <span className={cx('flex-1 text-sm', i.done && 'text-zinc-500 line-through')}>{i.text}</span><button className="text-xs text-zinc-600 opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 hover:text-red-400" onClick={() => run(() => del(`/items/${i.id}`))}>✕</button></div>))}</div>); })}
+              <ItemText text={i.text} done={!!i.done} /><button className="text-xs text-zinc-600 opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 hover:text-red-400" onClick={() => run(() => del(`/items/${i.id}`))}>✕</button></div>))}</div>); })}
         <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (newItem.text.trim()) run(async () => { await post(`/projects/${id}/items`, newItem); setNewItem({ ...newItem, text: '' }); }); }}>
           <select className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-sm" value={newItem.kind} onChange={e => setNewItem({ ...newItem, kind: e.target.value })}><option value="decision">Decision</option><option value="question">Question</option><option value="action">Action</option></select>
-          <input className={inputCls} value={newItem.text} onChange={e => setNewItem({ ...newItem, text: e.target.value })} placeholder="Add…" /><Btn type="submit">Add</Btn></form></Card>
+          <input className={inputCls} value={newItem.text} onChange={e => setNewItem({ ...newItem, text: e.target.value })} placeholder="Add…" /><Btn type="submit">Add</Btn></form></div>}</Card>
 
       <Card><div className="mb-2 flex items-center justify-between"><h2 className="font-medium">Links</h2><Btn small onClick={() => setAddSrc(true)}>+ Follow a source for this project</Btn></div>
         {p.links.map((l: any) => (<div key={l.id} className="flex items-center gap-2 py-1 text-sm"><Badge>{l.kind}</Badge>{l.private ? <Badge tone="amber">Private</Badge> : null}
