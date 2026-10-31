@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
-from sw import share as sharing, watches, push, maps
+from sw import share as sharing, watches, push, maps, bench, sandbox
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -485,6 +485,46 @@ def map_draft(pid: int):
     except llm.Unavailable as e: bad(str(e)[:240] + " (try again in a minute)", 503)
     except ValueError as e: bad(str(e))
 
+# ---------- the test bench: claims measured on this laptop, in a sandbox, after approval ----------
+@app.get("/api/bench")
+def bench_list(): return {"runs": bench.listing(), "machine": bench.machine(), "sandbox": sandbox.available(), "pulls": bench.STATE["pulls"]}
+
+@app.get("/api/bench/{rid}")
+def bench_get(rid: int):
+    r = bench.get(rid)
+    if not r: bad("No such test", 404)
+    return r
+
+@app.post("/api/bench")
+def bench_propose(body: dict):
+    """Draft a plan and script for testing one development. Nothing runs until it is approved."""
+    try: return bench.propose(int(body.get("development_id") or 0))
+    except LookupError as e: bad(str(e), 404)
+    except llm.Unavailable as e: bad(str(e)[:240] + " (try again in a minute)", 503)
+    except ValueError as e: bad(str(e))
+
+@app.post("/api/bench/{rid}/run")
+def bench_run(rid: int):
+    """Approve and run. Laptop only: the remote front door never lets a phone reach this."""
+    try: bench.start(rid)
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e), 409)
+    bg(bench.execute, rid); return {"started": True}
+
+@app.post("/api/bench/{rid}/pull")
+def bench_pull(rid: int, body: dict):
+    """Approve downloading a model a test needs."""
+    try: job = bench.pull(rid, str(body.get("model") or ""))
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e), 409)
+    bg(job); return {"started": True}
+
+@app.delete("/api/bench/{rid}")
+def bench_delete(rid: int):
+    try: bench.delete(rid)
+    except ValueError as e: bad(str(e), 409)
+    return {"ok": True}
+
 # ---------- watches, and phone notifications for them ----------
 @app.get("/api/watches")
 def watches_list(): return {"watches": watches.listing()}
@@ -759,7 +799,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps", "bench_runs"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}

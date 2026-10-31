@@ -6,6 +6,7 @@ import { ask, toast } from '../feedback';
 import { AddSource } from './Sources';
 import ShareButtons from './ShareButtons';
 import ProjectMap from './ProjectMap';
+import { TestThis } from './Bench';
 
 export default function Projects() {
   const { projectId, go } = useNav();
@@ -117,7 +118,7 @@ function Implications({ pid, onAccepted }: { pid: number; onAccepted: () => void
   const act = async (fn: () => Promise<any>, accepted = false) => { try { await fn(); await reload(); if (accepted) onAccepted(); } catch (e) { toast.error(errText(e)); } };
   const rows: any[] = data?.hypotheses || []; const cites = data?.citations || {};
   const open = rows.filter(r => r.status === 'new'), done = rows.filter(r => r.status !== 'new');
-  const cite = (id: number, counter = false) => { const c = cites[id]; return c && <li key={id} className="text-xs"><span className={counter ? 'text-amber-400' : 'text-zinc-400'}>{c.evidence}</span> · {c.claim} <button className="text-indigo-300 hover:underline" onClick={() => openArticle(c.article_id)}>{c.source}</button>{c.quote && <span className="block text-zinc-500">“{c.quote}”</span>}</li>; };
+  const cite = (id: number, counter = false) => { const c = cites[id]; return c && <li key={id} className="text-xs"><span className={counter ? 'text-amber-400' : 'text-zinc-400'}>{c.evidence}</span> · {c.claim} <button className="text-indigo-300 hover:underline" onClick={() => openArticle(c.article_id)}>{c.source}</button>{c.source !== 'Test bench' && <TestThis devId={c.id} />}{c.quote && <span className="block text-zinc-500">“{c.quote}”</span>}</li>; };
   const card = (r: any) => (
     <li key={r.id} className="rounded-lg border border-zinc-800 p-3">
       <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{r.headline}</span><Badge tone={DIRECTION[r.direction]?.[1]}>{DIRECTION[r.direction]?.[0] || r.direction}</Badge><Badge>{r.confidence} confidence</Badge>

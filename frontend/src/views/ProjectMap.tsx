@@ -4,6 +4,7 @@ import { onPhone } from '../device';
 import { toast } from '../feedback';
 import { useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Err, inputCls } from '../ui';
+import { TestThis } from './Bench';
 
 const TONE: Record<string, [string, 'red' | 'green' | 'indigo' | 'zinc']> = { threatens: ['Could undercut', 'red'], accelerates: ['Could speed up', 'green'], enables: ['Could open up', 'indigo'], news: ['Recent news', 'zinc'], quiet: ['Quiet', 'zinc'] };
 const EXAMPLE = 'Serving layer: vllm, continuous batching\nKV cache: kv cache, prefix caching\nModel: llama, qwen, quantization\n\nServing layer -> KV cache\nKV cache -> Model\n';
@@ -77,7 +78,7 @@ export default function ProjectMap({ pid }: { pid: number }) {
         <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-medium">{comp.label}</span><Badge tone={TONE[over.tone][1]}>{TONE[over.tone][0]}</Badge>
           <span className="text-xs text-zinc-500">{comp.terms.join(', ')}</span><button className="ml-auto text-xs text-zinc-500 hover:text-zinc-200" onClick={() => setPicked(null)}>✕</button></div>
         {over.hypotheses.length > 0 && <ul className="mb-2 space-y-1">{over.hypotheses.map((h: any) => <li key={h.id} className="text-xs"><Badge tone={TONE[h.direction]?.[1] || 'zinc'}>{h.direction}</Badge> {h.headline} <span className="text-zinc-500">({h.status === 'new' ? 'to review' : 'accepted'})</span></li>)}</ul>}
-        {over.developments.length > 0 ? <ul className="space-y-1">{over.developments.map((d: any) => <li key={d.id} className="text-xs"><span className="text-zinc-400">{d.evidence}</span> · {d.claim} <button className="text-indigo-300 hover:underline" onClick={() => openArticle(d.article_id)}>{d.source}</button></li>)}
+        {over.developments.length > 0 ? <ul className="space-y-1">{over.developments.map((d: any) => <li key={d.id} className="text-xs"><span className="text-zinc-400">{d.evidence}</span> · {d.claim} <button className="text-indigo-300 hover:underline" onClick={() => openArticle(d.article_id)}>{d.source}</button>{d.source !== 'Test bench' && <TestThis devId={d.id} />}</li>)}
           {over.development_count > over.developments.length && <li className="text-xs text-zinc-500">and {over.development_count - over.developments.length} more</li>}</ul>
           : <p className="text-xs text-zinc-500">No recent developments mention this part’s words.</p>}
       </div>}
