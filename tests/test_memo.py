@@ -89,7 +89,7 @@ class Writing(Setup):
 
 
 class Api(Setup):
-    def test_write_and_read_through_the_api_and_a_phone_may_read_but_not_write(self):
+    def test_write_and_read_through_the_api_and_a_phone_may_read(self):
         with mock.patch("litellm.completion", return_value=self.memo_reply()), mock.patch.object(h.api, "bg", lambda fn, *a: fn(*a)):
             self.assertTrue(c.post("/api/memo/run").json()["started"])
         st = c.get("/api/memo/status").json(); self.assertFalse(st["running"]); self.assertEqual(st["last"]["week"], memo.week_key(time.time()))
@@ -99,7 +99,6 @@ class Api(Setup):
         from tests.test_remote import VIA, turn_on, sign_in
         turn_on(); sign_in()
         self.assertEqual(c.get("/api/memos", headers=VIA).status_code, 200); self.assertEqual(c.get(f"/api/memos/{mid}", headers=VIA).status_code, 200)
-        self.assertEqual(c.post("/api/memo/run", headers=VIA).status_code, 403); self.assertEqual(c.post("/api/implications/review", headers=VIA).status_code, 403)
 
     def test_memos_and_checks_travel_with_a_backup(self):
         self.assertIn("memos", h.api.TABLES); self.assertIn("hypothesis_checks", h.api.TABLES)

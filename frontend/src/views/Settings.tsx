@@ -37,7 +37,7 @@ export default function Settings({ phone = false }: { phone?: boolean }) {
       <nav aria-label="Settings sections" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 bg-zinc-950/90 px-1 py-2 backdrop-blur">{(phone ? PHONE_SECTIONS : SECTIONS).map(t => <a key={t} href={'#' + slug(t)} onClick={e => { e.preventDefault(); document.getElementById(slug(t))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="rounded-full border border-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100">{t}</a>)}</nav>
 
       {!phone && <Appearance />}
-      {phone && <div className="rounded-lg border border-zinc-800 p-3 text-xs text-zinc-500">From your phone you can change the model, the budget and the voice. Everything else, including keys, the app lock, sources and backups, is changed on the laptop.</div>}
+      {phone && <div className="rounded-lg border border-zinc-800 p-3 text-xs text-zinc-500">From your phone you can change the model, the budget and the voice. Everything else, including keys, the app lock, GitHub links and backups, is changed on the laptop.</div>}
 
       {!phone && <><Section title="Notifications" desc="Desktop notifications while SmartWard is running (it keeps running in the tray when you close the window). With the app lock on, they never show titles.">
         {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval'], ['notify_memo', 'The weekly memo is ready'], ['notify_watches', 'A watch matches something new']] as const).map(([k, label]) =>

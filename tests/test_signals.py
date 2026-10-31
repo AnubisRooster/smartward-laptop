@@ -153,11 +153,10 @@ class SignalsApi(unittest.TestCase):
         for d in c.get("/api/domains").json(): c.delete(f"/api/domains/{d['id']}")
         self.assertEqual(c.get("/api/domains").json(), [])
 
-    def test_a_signed_in_phone_may_read_signals_but_not_edit_domains(self):
+    def test_a_signed_in_phone_may_read_signals(self):
         from tests.test_remote import VIA, turn_on, sign_in
         turn_on(); sign_in()
         self.assertEqual(c.get("/api/signals", headers=VIA).status_code, 200); self.assertEqual(c.get("/api/domains", headers=VIA).status_code, 200)
-        self.assertEqual(c.post("/api/domains", json={"name": "x", "keywords": ["y"]}, headers=VIA).status_code, 403)
 
 
 class Refinements(unittest.TestCase):

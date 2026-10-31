@@ -148,7 +148,7 @@ class Reviewing(Setup):
 
 
 class Api(Setup):
-    def test_run_list_accept_through_the_api_and_a_phone_may_review_but_not_start_a_run(self):
+    def test_run_list_accept_through_the_api_and_a_phone_may_review(self):
         with mock.patch("litellm.completion", return_value=reply([hyp([self.ids[0], self.ids[1]])])), mock.patch.object(h.api, "bg", lambda fn, *a: fn(*a)):
             self.assertTrue(c.post(f"/api/projects/{self.pid}/implications/run").json()["started"])
         last = c.get("/api/implications/status").json(); self.assertFalse(last["running"]); self.assertEqual(last["last"]["new"], 1)
@@ -158,7 +158,6 @@ class Api(Setup):
         turn_on(); sign_in()
         self.assertEqual(c.get(f"/api/projects/{self.pid}/implications", headers=VIA).status_code, 200)
         self.assertEqual(c.post(f"/api/implications/{hid}/dismiss", json={}, headers=VIA).status_code, 200)
-        self.assertEqual(c.post(f"/api/projects/{self.pid}/implications/run", headers=VIA).status_code, 403)
 
     def test_hypotheses_travel_with_a_backup_and_go_with_the_project(self):
         self.assertIn("hypotheses", h.api.TABLES)

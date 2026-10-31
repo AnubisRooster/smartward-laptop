@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ago, errText, get, post } from '../api';
-import { onPhone } from '../device';
 import { memoParts } from '../digestBrief';
 import { speech, useLoad, useNav, useSpeech } from '../hooks';
 import { Badge, Btn, Card, Err } from '../ui';
@@ -42,11 +41,11 @@ export default function MemoCard() {
             {data.memos.map((x: any) => <option key={x.id} value={x.id}>Week {x.week.split('-W')[1]}, {x.week.split('-W')[0]}</option>)}</select>}
           {m && <ShareButtons kind="memo" id={m.id} />}
           {m && speech.supported && (sp.on && sp.owner === 'memo' ? <Btn small onClick={() => speech.stop()}>■ Stop</Btn> : <Btn small onClick={read} title="Reads this memo aloud">🔊 Read aloud</Btn>)}
-          {!onPhone && <Btn small onClick={write} loading={busy} title="Checks accepted implications, then writes this week's memo from the week's checked developments">{m && m.week === data?.latest?.week && !picked ? 'Rewrite' : 'Write this week’s memo'}</Btn>}
+          {<Btn small onClick={write} loading={busy} title="Checks accepted implications, then writes this week's memo from the week's checked developments">{m && m.week === data?.latest?.week && !picked ? 'Rewrite' : 'Write this week’s memo'}</Btn>}
         </span>
       </div>
       <Err>{err}</Err>
-      {!m && !busy && <p className="text-sm text-zinc-500">No memo yet. {onPhone ? 'Write one on the laptop.' : 'Write one to see what shifted this week and what it may mean for your projects. To have it written every week, turn it on in Settings → Background refresh.'}</p>}
+      {!m && !busy && <p className="text-sm text-zinc-500">No memo yet. {'Write one to see what shifted this week and what it may mean for your projects. To have it written every week, turn it on in Settings → Background refresh.'}</p>}
       {busy && <p className="text-sm text-zinc-500" role="status">Checking how accepted implications are holding up, then writing the memo. Free models can take a few minutes.</p>}
       {m && <>
         {HEADS.map(([k, head]) => m[k]?.length > 0 && (

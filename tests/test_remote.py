@@ -72,9 +72,20 @@ class TheFrontDoor(unittest.TestCase):
             self.assertEqual(c.get(path, headers=VIA).status_code, 200, path)
         for method, path in (("post", "/api/backup"), ("post", "/api/restore"), ("get", "/api/export/json"), ("get", "/api/export/markdown"),
                              ("post", "/api/danger/erase"), ("post", "/api/lock/set"), ("get", "/api/dev/info"), ("post", "/api/voice/start"), ("get", "/api/voice/poll"),
-                             ("post", "/api/sources"), ("delete", "/api/sources/1"), ("put", "/api/remote/config"), ("get", "/api/remote/status"), ("post", "/api/remote/revoke"),
+                             ("post", "/api/projects/1/links"), ("delete", "/api/projects/1"), ("put", "/api/remote/config"), ("get", "/api/remote/status"), ("post", "/api/remote/revoke"),
                              ("post", "/api/events/poll")):
             r = getattr(c, method)(path, headers=VIA, **({"json": {}} if method in ("put", "post") else {})); self.assertEqual(r.status_code, 403, f"{method} {path}")
+
+    def test_what_a_phone_may_now_start_and_what_it_still_may_not(self):
+        # Matched against the allow-list rather than called: these routes start model calls and fetches.
+        ok = lambda m, p: remote._matches(remote.ALLOW, m, p)
+        for m, p in (("POST", "/api/refresh"), ("POST", "/api/pipeline/run"), ("POST", "/api/memo/run"), ("POST", "/api/implications/review"), ("POST", "/api/projects/3/implications/run"),
+                     ("POST", "/api/projects/3/map/draft"), ("POST", "/api/projects/3/map/review"), ("PUT", "/api/projects/3/map"), ("POST", "/api/projects"), ("PUT", "/api/projects/3"),
+                     ("DELETE", "/api/items/4"), ("POST", "/api/themes/4/merge"), ("POST", "/api/sources"), ("DELETE", "/api/sources/4"), ("POST", "/api/discover"), ("POST", "/api/domains"), ("DELETE", "/api/domains/2")):
+            self.assertTrue(ok(m, p), f"{m} {p}")
+        for m, p in (("POST", "/api/projects/3/links"), ("POST", "/api/links/3/sync"), ("DELETE", "/api/projects/3"), ("POST", "/api/bench"), ("POST", "/api/bench/3/run"), ("POST", "/api/bench/3/pull"),
+                     ("POST", "/api/downloads"), ("POST", "/api/backup"), ("POST", "/api/lock/set"), ("PUT", "/api/remote/config")):
+            self.assertFalse(ok(m, p), f"{m} {p}")
 
     def test_only_the_allowed_tailscale_account_gets_in(self):
         turn_on(); other = {**VIA, "Tailscale-User-Login": "someone@else.com"}

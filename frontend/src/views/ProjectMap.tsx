@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { errText, get, post, put } from '../api';
-import { onPhone, useSheet } from '../device';
+import { useSheet } from '../device';
 import { ask, toast } from '../feedback';
 import { useLoad, useNav } from '../hooks';
 import { lightSvg, svgToPng } from '../mapImage';
@@ -192,7 +192,6 @@ export default function ProjectMap({ pid }: { pid: number }) {
     follow();
   };
   useEffect(() => {                                 // a draft started earlier (this page was left) is picked up again
-    if (onPhone) return;
     get(`/projects/${pid}/map/draft/status`).then(st => { if (st.running || st.result || st.error) follow(); }).catch(() => {});
   }, [pid]);
   const save = async () => { setBusy('save'); setErr(''); try { await put(`/projects/${pid}/map`, { text: editing }); setEditing(null); setPreview(null); setDraftNote(''); reload(); } catch (e) { setErr(errText(e)); } setBusy(''); };
@@ -206,8 +205,8 @@ export default function ProjectMap({ pid }: { pid: number }) {
         <div className="text-xs text-zinc-500">The project’s parts, where they run and what flows between them, with recent developments and implications placed on the part they mention. Click a part.</div></div>
         {editing === null && <div className="flex flex-wrap gap-2">
           {data?.map && <MapDownload pid={pid} />}
-          {!onPhone && data?.map && <><Btn small onClick={draft} loading={busy === 'draft'}>Redraft</Btn><Btn small onClick={() => { setEditing(data.map.text); setPicked(null); }}>Edit</Btn></>}
-          {!onPhone && !data?.map && <><Btn small kind="primary" onClick={draft} loading={busy === 'draft'}>Draft it for me</Btn><Btn small onClick={() => setEditing(EXAMPLE)}>Write it myself</Btn></>}</div>}
+          {data?.map && <><Btn small onClick={draft} loading={busy === 'draft'}>Redraft</Btn><Btn small onClick={() => { setEditing(data.map.text); setPicked(null); }}>Edit</Btn></>}
+          {!data?.map && <><Btn small kind="primary" onClick={draft} loading={busy === 'draft'}>Draft it for me</Btn><Btn small onClick={() => setEditing(EXAMPLE)}>Write it myself</Btn></>}</div>}
       </div>
       <Err>{err}</Err>
       {busy === 'draft' && <p className="text-xs text-zinc-400" role="status">Drafting three versions, scoring them against the best-practice rules, having a second model review the best one, and repairing it up to twice. Free models can take 10 minutes or more; you can leave this page and come back.<br /><span className="text-zinc-300">{progress}</span></p>}
@@ -221,17 +220,17 @@ export default function ProjectMap({ pid }: { pid: number }) {
             <li><code>~Name …  # why</code> a suggested part, drawn dashed; <code>@pattern agent_platform</code> checks it against a reference (agent_platform, llm_serving, rag, hybrid_routing, none); <code>@waive S3: reason</code> sets a rule aside, on the record.</li>
             <li>Words match whole words in recent developments; plurals and hyphens are allowed. Amber numbers are words no article uses yet.</li></ul></details>
         {preview?.problems?.length > 0 && <ul className="text-xs text-red-300">{preview.problems.map((p: string) => <li key={p}>{p}</li>)}</ul>}
-        {preview && <Scorecard sc={preview.score} reviewed={preview.reviewed} notes={preview.checks} onReview={onPhone ? undefined : review} reviewing={busy === 'review'} onWaive={waive} open />}
+        {preview && <Scorecard sc={preview.score} reviewed={preview.reviewed} notes={preview.checks} onReview={review} reviewing={busy === 'review'} onWaive={waive} open />}
         {preview?.parts?.length > 0 && <Matches map={preview} />}
         <div className="flex gap-2"><Btn small kind="primary" onClick={save} loading={busy === 'save'} disabled={!!preview?.problems?.length}>Save</Btn>
           <Btn small onClick={draft} loading={busy === 'draft'}>{data?.map ? 'Redraft' : 'Draft again'}</Btn><Btn small kind="ghost" onClick={() => { setEditing(null); setPreview(null); setDraftNote(''); }}>Cancel</Btn></div>
       </div>}
-      {!map && editing === null && <p className="text-sm text-zinc-500">No architecture yet.{onPhone ? ' Make one on the laptop.' : ' SmartWard can draft one from the project’s goal, brief and synced README, check it against a reference architecture, and hand it to you to edit.'}</p>}
+      {!map && editing === null && <p className="text-sm text-zinc-500">No architecture yet. {' SmartWard can draft one from the project’s goal, brief and synced README, check it against a reference architecture, and hand it to you to edit.'}</p>}
       {map?.pattern_title && <div className="text-xs text-zinc-500">Checked against: {map.pattern_title}</div>}
       <div ref={box} className="max-h-[80vh] overflow-auto rounded-lg border border-zinc-800/60 p-2 [&_svg]:mx-auto" aria-label="Architecture diagram" />
       {map?.parts?.length > 0 && <div className="flex flex-wrap gap-2 text-[11px] text-zinc-500">{Object.entries(TONE).map(([k, [l, tone]]) => <Badge key={k} tone={tone}>{l}</Badge>)}<span>· numbers count items placed on each part · dashed border: suggested · dashed arrow: control</span>
         <button className="ml-auto text-zinc-400 hover:text-zinc-100" onClick={() => setFit(!fit)}>{fit ? 'Full size' : 'Fit to width'}</button></div>}
-      {editing === null && map && <Scorecard sc={map.score} reviewed={map.reviewed} notes={map.checks} onReview={onPhone ? undefined : review} reviewing={busy === 'review'} onWaive={onPhone ? undefined : waive} />}
+      {editing === null && map && <Scorecard sc={map.score} reviewed={map.reviewed} notes={map.checks} onReview={review} reviewing={busy === 'review'} onWaive={waive} />}
       {part && over && <div className="rounded-lg border border-zinc-800 p-3 text-sm">
         <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-medium">{part.label}</span><Badge>{part.type}</Badge>{part.zone && <Badge>{part.zone}</Badge>}{part.suggested && <Badge tone="indigo">suggested</Badge>}
           <Badge tone={TONE[over.tone][1]}>{TONE[over.tone][0]}</Badge><button className="ml-auto text-xs text-zinc-500 hover:text-zinc-200" onClick={() => setPicked(null)}>✕</button></div>

@@ -159,10 +159,10 @@ class Api(unittest.TestCase):
         rows = c.get("/api/developments").json(); self.assertEqual(rows[0]["kind"], "efficiency"); self.assertTrue(rows[0]["grounded"]); self.assertEqual(rows[0]["domains"], ["Inference serving"])
         self.assertEqual(len(c.get("/api/developments", params={"domain": "Inference serving"}).json()), 3); self.assertEqual(c.get("/api/developments", params={"domain": "KV cache"}).json(), [])
 
-    def test_a_phone_may_read_developments_but_not_start_a_reading_run(self):
+    def test_a_phone_may_read_developments(self):
         from tests.test_remote import VIA, turn_on, sign_in
         turn_on(); sign_in()
-        self.assertEqual(c.get("/api/developments", headers=VIA).status_code, 200); self.assertEqual(c.post("/api/developments/run", json={"sample": 3}, headers=VIA).status_code, 403)
+        self.assertEqual(c.get("/api/developments", headers=VIA).status_code, 200)
 
 
 if __name__ == "__main__":

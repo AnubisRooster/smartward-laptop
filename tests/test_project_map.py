@@ -105,8 +105,6 @@ class Overlay(unittest.TestCase):
         from tests.test_remote import VIA, turn_on, sign_in
         turn_on(); sign_in()
         self.assertEqual(c.get(f"/api/projects/{self.pid}/map", headers=VIA).status_code, 200)
-        self.assertEqual(c.put(f"/api/projects/{self.pid}/map", json={"text": TEXT}, headers=VIA).status_code, 403)
-        self.assertEqual(c.post(f"/api/projects/{self.pid}/map/draft", headers=VIA).status_code, 403)
         c.delete(f"/api/projects/{self.pid}"); self.assertEqual(db.q("SELECT COUNT(*) n FROM project_maps", one=True)["n"], 0)
 
     def test_the_project_share_lists_where_things_land(self):
@@ -202,7 +200,6 @@ class Drafting(unittest.TestCase):
         self.assertFalse(c.post(f"/api/projects/{self.pid}/map/preview", json={"text": GOOD + "Coding agent -> GPUs: runs on\n"}).json()["reviewed"])
         self.assertEqual(c.post(f"/api/projects/{self.pid}/map/review", json={"text": "A: x\nA -> B"}).status_code, 400)
         from tests.test_remote import VIA, turn_on, sign_in
-        turn_on(); sign_in(); self.assertEqual(c.post(f"/api/projects/{self.pid}/map/review", json={"text": GOOD}, headers=VIA).status_code, 403)
 
     def test_private_projects_draft_and_review_locally(self):
         db.x("INSERT INTO project_links(project_id,kind,url,private) VALUES(?,?,?,1)", (self.pid, "github", "https://github.com/me/secret"))

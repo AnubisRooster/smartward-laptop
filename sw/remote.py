@@ -20,7 +20,7 @@ LOCAL_ORIGINS = frozenset({"http://127.0.0.1:8000", "http://localhost:8000", "ht
 OPEN_TO_WEB = {"/api/share"}          # "Add to SmartWard" from any page you're reading: it only saves that page
 
 # What a signed-in phone may do. Everything else is refused: settings and keys, backups and exports, erasing, the app lock,
-# changing sources, and the laptop's own microphone.
+# GitHub links, the test bench, and the laptop's own microphone.
 _R = lambda m, p: (m, re.compile("^" + p + "$"))
 ALLOW = [
     _R("GET", r"/api/(status|settings|sources|digest|graph|themes|projects|domains|signals|developments|developments/status|memos|memo/status|implications/status|chat/modes|conversations|approvals|search|tts/status|articles|help)"),
@@ -33,6 +33,12 @@ ALLOW = [
     _R("GET", r"/api/(watches|push/key)"), _R("POST", r"/api/watches"), _R("PUT", r"/api/watches/\d+"), _R("DELETE", r"/api/watches/\d+"),
     _R("POST", r"/api/push/(subscribe|unsubscribe|test)"),
     _R("GET", r"/api/projects/\d+/map(/draft/status|/export)?"), _R("GET", r"/api/bench(/\d+)?"),
+    # Phone-enabled 2026-10-31: refreshing, writing the memo and implications, theme edits, projects, architecture maps, sources and domains.
+    _R("POST", r"/api/(refresh|pipeline/run|developments/run|memo/run|implications/review|implications/recap)"), _R("POST", r"/api/sources/\d+/refresh"),
+    _R("POST", r"/api/projects/\d+/(implications/run|map/draft|map/preview|map/review)"), _R("PUT", r"/api/projects/\d+/map"), _R("DELETE", r"/api/items/\d+"),
+    _R("POST", r"/api/themes/\d+/(rename|merge|split)"), _R("POST", r"/api/projects"), _R("PUT", r"/api/projects/\d+"),
+    _R("POST", r"/api/(sources|discover|domains)"), _R("PATCH", r"/api/sources/\d+"), _R("DELETE", r"/api/sources/\d+"),
+    _R("GET", r"/api/sources/removed"), _R("POST", r"/api/sources/removed/\d+/restore"), _R("PUT", r"/api/domains/\d+"), _R("DELETE", r"/api/domains/\d+"),
     _R("GET", r"/api/(usage|models|openrouter/models)"), _R("POST", r"/api/models/test"), _R("PUT", r"/api/settings"),     # the phone's Settings: only the keys below
 ]
 
