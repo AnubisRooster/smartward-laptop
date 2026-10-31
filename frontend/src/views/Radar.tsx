@@ -4,6 +4,7 @@ import { useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Field, Modal, Spin, Title, inputCls, cx } from '../ui';
 import { toast } from '../feedback';
 import MemoCard from './Memo';
+import Watches from './Watches';
 
 const TONE: Record<string, 'green' | 'amber' | 'red' | 'indigo' | 'zinc'> = { emerging: 'indigo', rising: 'green', cooling: 'amber', steady: 'zinc', quiet: 'zinc', unknown: 'zinc' };
 const WORDS: Record<string, string> = { emerging: 'Emerging', rising: 'Rising', cooling: 'Cooling', steady: 'Steady', quiet: 'Quiet', unknown: 'Not enough history' };
@@ -35,6 +36,7 @@ export default function Radar() {
       <Title right={<><Btn small onClick={() => setEditing(true)}>Edit domains</Btn><Btn small onClick={reload}>↻ Refresh</Btn></>}>Radar</Title>
       <p className="text-sm text-zinc-500">What is rising, new or fading in the domains you follow, counted from your own articles. Each source is compared with its own past, so a feed you added recently can’t fake a trend. These are signals, not conclusions: open the evidence.</p>
       <MemoCard />
+      <Watches />
       <Err>{error}</Err>
       {loading && !data && <div className="py-10 text-center"><Spin /></div>}
       {data?.domains?.[0]?.coverage?.provisional && <Card className="border-amber-700/50 text-sm text-amber-200">Provisional: only {data.domains[0].coverage.sources_comparable} sources have enough history to compare yet. The picture firms up as more weeks arrive.</Card>}

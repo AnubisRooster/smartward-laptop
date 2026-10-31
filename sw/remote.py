@@ -25,6 +25,8 @@ ALLOW = [
     _R("POST", r"/api/conversations"), _R("POST", r"/api/conversations/\d+/(send|cancel)"), _R("DELETE", r"/api/conversations/\d+"),
     _R("POST", r"/api/approvals/[0-9a-f]+"), _R("POST", r"/api/projects/\d+/items"), _R("GET", r"/api/projects/\d+/implications"), _R("POST", r"/api/implications/\d+/(accept|dismiss)"), _R("PATCH", r"/api/items/\d+"),
     _R("POST", r"/api/remote/logout"),
+    _R("GET", r"/api/(watches|push/key)"), _R("POST", r"/api/watches"), _R("PUT", r"/api/watches/\d+"), _R("DELETE", r"/api/watches/\d+"),
+    _R("POST", r"/api/push/(subscribe|unsubscribe|test)"),
     _R("GET", r"/api/(usage|models|openrouter/models)"), _R("POST", r"/api/models/test"), _R("PUT", r"/api/settings"),     # the phone's Settings: only the keys below
 ]
 

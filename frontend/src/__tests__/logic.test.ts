@@ -217,3 +217,16 @@ describe('memo read aloud', () => {
   });
   it('says so when a memo is empty', () => { expect(memoParts({ week: '2026-W01', shifted: [], projects: [], watch: [], questions: [] })[1]).toMatch(/nothing/); });
 });
+
+import { keyBytes, needsHomeScreen } from '../pushClient';
+describe('phone notifications', () => {
+  it('decodes the laptop’s public key for the push service', () => {
+    const k = keyBytes('BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM');
+    expect(k.length).toBe(65); expect(k[0]).toBe(4);
+  });
+  it('asks iPhone users to add SmartWard to the Home Screen first', () => {
+    expect(needsHomeScreen('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', false)).toBe(true);
+    expect(needsHomeScreen('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', true)).toBe(false);
+    expect(needsHomeScreen('Mozilla/5.0 (Linux; Android 15; moto g)', false)).toBe(false);
+  });
+});

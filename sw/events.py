@@ -3,7 +3,7 @@ import threading
 from . import db
 
 _lock = threading.Lock()
-_seen = {"articles": None, "sources": {}, "approvals": set(), "memo": None}   # None: nothing baselined yet since the app started
+_seen = {"articles": None, "sources": {}, "approvals": set(), "memo": None, "watch": None}   # None: nothing baselined yet since the app started
 
 
 def _like(q):
@@ -53,10 +53,15 @@ def poll():
         mid = m["id"] if m else 0
         if _seen["memo"] is not None and mid != _seen["memo"] and m and want("notify_memo"): out.append({"kind": "memo", "title": "This week’s memo is ready", "body": f"Week {m['week']}: open the Radar to read it."})
         _seen["memo"] = mid
+        top = (db.q("SELECT MAX(id) n FROM watch_hits", one=True) or {}).get("n") or 0
+        if _seen["watch"] is not None and top > _seen["watch"]:
+            n = db.q("SELECT COUNT(*) n FROM watch_hits WHERE id>? AND notified!=2", (_seen["watch"],), one=True)["n"]
+            if n and want("notify_watches"): out.append({"kind": "watch", "title": f"{n} new watch match{'es' if n != 1 else ''}", "body": "Open the Radar to see them."})
+        _seen["watch"] = top
     if db.get_setting("lock_enabled"):          # a locked app shouldn't show titles on the desktop
         for e in out: e["body"] = "Open SmartWard to see details."
     return out
 
 
 def reset():
-    with _lock: _seen.update({"articles": None, "sources": {}, "approvals": set(), "memo": None})
+    with _lock: _seen.update({"articles": None, "sources": {}, "approvals": set(), "memo": None, "watch": None})

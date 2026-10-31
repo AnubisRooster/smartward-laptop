@@ -5,6 +5,7 @@ import { Badge, Btn, Card, Err, Field, inputCls, Seg, Spin, Title } from '../ui'
 import { ask, toast } from '../feedback';
 import VoiceSettings from './VoiceSettings';
 import DesktopSettings from './DesktopSettings';
+import { PhonePush, PushDevices } from './PushSettings';
 import RemoteSettings from './RemoteSettings';
 import { PhoneAccount } from '../RemoteSignIn';
 import { openHelp } from '../HelpGuide';
@@ -12,7 +13,7 @@ import { readPref, setPref, ThemePref } from '../theme';
 
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
 const SECTIONS = ['Appearance', 'Notifications', 'Remote access', 'Model', 'Interests & relevance', 'Usage & budget', 'Background refresh', 'Voice', 'Desktop', 'App lock', 'GitHub', 'Export', 'Backup & restore', 'Developer'];
-const PHONE_SECTIONS = ['Usage & budget', 'Model', 'Voice'];      // what a phone may change (the server enforces the same list)
+const PHONE_SECTIONS = ['Notifications', 'Usage & budget', 'Model', 'Voice'];      // what a phone may change (the server enforces the same list)
 const Section = ({ title, children, desc }: { title: string; children: any; desc?: string }) => <Card className="space-y-3"><div id={slug(title)} className="scroll-mt-16"><h2 className="font-medium">{title}</h2>{desc && <div className="text-xs text-zinc-500">{desc}</div>}</div>{children}</Card>;
 const Row = ({ children }: { children: any }) => <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{children}</div>;
 const money = (n: number) => '$' + (n || 0).toFixed(n < 1 ? 3 : 2);
@@ -39,9 +40,12 @@ export default function Settings({ phone = false }: { phone?: boolean }) {
       {phone && <div className="rounded-lg border border-zinc-800 p-3 text-xs text-zinc-500">From your phone you can change the model, the budget and the voice. Everything else, including keys, the app lock, sources and backups, is changed on the laptop.</div>}
 
       {!phone && <><Section title="Notifications" desc="Desktop notifications while SmartWard is running (it keeps running in the tray when you close the window). With the app lock on, they never show titles.">
-        {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval'], ['notify_memo', 'The weekly memo is ready']] as const).map(([k, label]) =>
+        {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval'], ['notify_memo', 'The weekly memo is ready'], ['notify_watches', 'A watch matches something new']] as const).map(([k, label]) =>
           <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s[k] !== false} onChange={e => save({ [k]: e.target.checked })} />{label}</label>)}
+        <PushDevices />
+        <Row><span>Phone notifications per day, at most</span><select aria-label="Phone notifications per day" className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1" value={s.push_daily_cap ?? 6} onChange={e => save({ push_daily_cap: Number(e.target.value) })}>{[2, 4, 6, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}</select></Row>
       </Section></>}
+      {phone && <Section title="Notifications" desc="Get a notification on this phone when a watch matches or the weekly memo is ready."><PhonePush /></Section>}
 
       {!phone && <RemoteSettings />}
 

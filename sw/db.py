@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS digests(id INTEGER PRIMARY KEY, created REAL, data TE
 CREATE TABLE IF NOT EXISTS memos(id INTEGER PRIMARY KEY, week TEXT UNIQUE, data TEXT, created REAL, model TEXT);
 CREATE TABLE IF NOT EXISTS hypothesis_checks(id INTEGER PRIMARY KEY, hid INTEGER, ts REAL, verdict TEXT, supports TEXT DEFAULT '[]', contradicts TEXT DEFAULT '[]', seen TEXT DEFAULT '[]', note TEXT, model TEXT);
 CREATE INDEX IF NOT EXISTS ix_hcheck ON hypothesis_checks(hid);
+CREATE TABLE IF NOT EXISTS watches(id INTEGER PRIMARY KEY, name TEXT, terms TEXT DEFAULT '[]', domains TEXT DEFAULT '[]', sources TEXT DEFAULT '[]', min_evidence TEXT DEFAULT 'any', enabled INTEGER DEFAULT 1, scanned REAL, last_hit REAL, created REAL);
+CREATE TABLE IF NOT EXISTS watch_hits(id INTEGER PRIMARY KEY, watch_id INTEGER, article_id INTEGER, dev_id INTEGER, ts REAL, notified INTEGER DEFAULT 0, UNIQUE(watch_id, article_id));
+CREATE TABLE IF NOT EXISTS push_subs(id INTEGER PRIMARY KEY, endpoint TEXT UNIQUE, keys TEXT, label TEXT, created REAL, last_ok REAL, fails INTEGER DEFAULT 0);
 """
 
 def _connect():
@@ -86,7 +89,7 @@ DEFAULTS = {
     "auto_approve": False, "onboarding_completed": False,
     "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60, "lock_idle": 15,
     "voice_rate": 1.0, "voice_name": "", "digest_notify": False,
-    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free", "openrouter/cohere/north-mini-code:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True, "notify_memo": True, "memo_auto": False, "memo_day": 0,
+    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free", "openrouter/cohere/north-mini-code:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True, "notify_memo": True, "notify_watches": True, "memo_auto": False, "memo_day": 0, "push_daily_cap": 6, "push_vapid_private": "", "push_vapid_public": "", "push_sent": {},
     # Natural read-aloud voice (Kokoro, on this machine). engine: auto | kokoro | browser
     "tts_engine": "auto", "tts_url": "http://127.0.0.1:8880", "tts_voice": "af_heart", "tts_profiles": {}, "tts_profile": "",
     "private_repo_local_only": True, "github_token": "", "lock_hash": "", "api_key": "",
@@ -101,7 +104,7 @@ def get_setting(key):
 def set_setting(key, value):
     x("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value)))
 
-def all_settings(hide=("lock_hash", "github_token", "api_key", "remote_hash")):
+def all_settings(hide=("lock_hash", "github_token", "api_key", "remote_hash", "push_vapid_private")):
     out = dict(DEFAULTS)
     for r in q("SELECT key,value FROM settings"):
         try: out[r["key"]] = json.loads(r["value"])

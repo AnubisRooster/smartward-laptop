@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
-from sw import share as sharing
+from sw import share as sharing, watches, push
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -74,7 +74,7 @@ def put_settings(s: SettingsIn, request: Request):
         why = remote.phone_settings_refusal(s.values)
         if why: bad(why, 403)
     for k, v in s.values.items():
-        if k in ("lock_hash",) or k.startswith("remote_"): continue
+        if k in ("lock_hash",) or k.startswith("remote_") or (k.startswith("push_") and k != "push_daily_cap"): continue
         if k.startswith("tts_") or k == "voice_rate":
             try: tts.validate_setting(k, v, s.values)
             except ValueError as e: bad(str(e))
@@ -406,9 +406,11 @@ def implications_dismiss(hid: int, body: dict):
     return {"ok": True}
 
 # ---------- the weekly memo, and checking accepted hypotheses against what happened since ----------
-def _memo_job():
+def _memo_job(scheduled=False):
     memo.STATE.update(running=True, message="")
-    try: memo.STATE["message"] = json.dumps({"week": memo.generate()["week"]})
+    try:
+        week = memo.generate()["week"]; memo.STATE["message"] = json.dumps({"week": week})
+        if scheduled: push.announce(0, 0, week)                   # a memo you just asked for doesn't need to buzz your phone
     except llm.Unavailable as e: memo.STATE["message"] = json.dumps({"error": str(e)[:240] + " (waiting is fine; try again later)"})
     except Exception as e: memo.STATE["message"] = json.dumps({"error": str(e)[:240]})
     finally: memo.STATE["running"] = False
@@ -458,6 +460,48 @@ def share_export(kind: str, ident: int, format: str = "html", download: bool = F
     except sharing.Refused as e: bad(str(e), 403)
     except LookupError as e: bad(str(e), 404)
     except ValueError as e: bad(str(e))
+
+# ---------- watches, and phone notifications for them ----------
+@app.get("/api/watches")
+def watches_list(): return {"watches": watches.listing()}
+
+@app.post("/api/watches")
+def watches_add(body: dict):
+    try: return watches.create(body)
+    except ValueError as e: bad(str(e))
+
+@app.put("/api/watches/{wid}")
+def watches_edit(wid: int, body: dict):
+    try: return watches.update(wid, body)
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e))
+
+@app.delete("/api/watches/{wid}")
+def watches_del(wid: int): watches.delete(wid); return {"ok": True}
+
+@app.get("/api/push/key")
+def push_key():
+    """The public half of the signing key, which a phone needs to subscribe. The private half never leaves the laptop."""
+    try: return {"public_key": push.keys()[1], "devices": push.devices()}
+    except ImportError: bad("Phone notifications need the pywebpush package (pip install -r requirements.txt).", 503)
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: dict):
+    try: return push.subscribe(body.get("subscription"), str(body.get("label") or ""))
+    except ValueError as e: bad(str(e))
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: dict): push.unsubscribe(str(body.get("endpoint") or "")); return {"ok": True}
+
+@app.delete("/api/push/devices/{did}")
+def push_forget(did: int): db.x("DELETE FROM push_subs WHERE id=?", (did,)); return {"ok": True}
+
+@app.post("/api/push/test")
+def push_test(body: dict):
+    ep = str(body.get("endpoint") or "")
+    if not db.q("SELECT 1 FROM push_subs WHERE endpoint=?", (ep,), one=True): bad("This device isn't subscribed.", 404)
+    if not push.send("SmartWard: test notification", "Notifications are working.", "/#/settings", "test", endpoint=ep, capped=False): bad("The push service didn't accept it. Try turning notifications off and on again.", 502)
+    return {"ok": True}
 
 # ---------- what the page itself reports when something breaks (for diagnosing a window nobody can see into) ----------
 _clientlog = {"n": 0, "t": 0.0}
@@ -691,7 +735,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}
@@ -742,7 +786,7 @@ def backup(body: dict):
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     pw = body.get("passphrase", "")
     if len(pw) < 8: bad("Use a passphrase of at least 8 characters.")
-    data = _dump(True, True); data["settings"] = {k: v for k, v in db.all_settings(hide=()).items() if k not in ("github_token", "lock_hash", "lock_enabled", "api_key") and not k.startswith("remote_")}
+    data = _dump(True, True); data["settings"] = {k: v for k, v in db.all_settings(hide=()).items() if k not in ("github_token", "lock_hash", "lock_enabled", "api_key") and not k.startswith(("remote_", "push_"))}
     raw = gzip.compress(json.dumps(data).encode()); salt, nonce = secrets.token_bytes(16), secrets.token_bytes(12)
     blob = b"SWBK1" + salt + nonce + AESGCM(_key(pw, salt)).encrypt(nonce, raw, b"SWBK1")
     return Response(blob, media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=smartward-backup.swbk"})
@@ -792,7 +836,9 @@ def _scheduler():
                 pipeline.refresh_all()
             elif not pipeline.STATE["running"] and pipeline.counts()["waiting"] > 0:
                 pipeline.run()
-            if memo.due(): memo.STATE["running"] = True; bg(_memo_job)
+            if memo.due(): memo.STATE["running"] = True; bg(_memo_job, True)
+            watches.scan(); n, w = watches.unannounced()
+            if n: push.announce(n, w)
         except Exception: pass
         time.sleep(60)
 
