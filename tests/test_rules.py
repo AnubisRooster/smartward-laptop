@@ -163,5 +163,16 @@ class FiveFixes(unittest.TestCase):
         self.assertTrue(all(x["met"] for x in rules.score(m, p, None, rev)["constraints"]))                    # nothing missing: the reviewer stands
 
 
+class FromTheRealDraft(unittest.TestCase):
+    def test_a_match_word_does_not_make_a_part_a_router(self):
+        text = GOOD.replace("Tool registry (datastore): mcp, tool registry", "Tool registry (datastore): mcp, tool registry, hybrid routing")
+        self.assertNotIn("O1", failed(text)); self.assertNotIn("O3", failed(text))
+
+    def test_unreviewed_evidence_counts_for_less(self):
+        m = maps.parse(GOOD); over = {p["id"]: {"development_count": 1} for p in m["parts"]}
+        self.assertEqual(rules.score(m, None, over)["parts"]["evidence"], 60)
+        self.assertEqual(rules.score(m, None, over, {"implausible": [], "bad_protocols": [], "constraints": []})["parts"]["evidence"], 100)
+
+
 if __name__ == "__main__":
     unittest.main()

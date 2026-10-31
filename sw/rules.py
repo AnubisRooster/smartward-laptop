@@ -11,6 +11,7 @@ evidence from your reading 10. A rule you waive in the map ("@waive S3: secrets 
 import re
 from . import patterns
 
+UNREVIEWED = 0.6          # evidence no reviewer has checked counts for 60%
 WEIGHTS = {"correctness": 25, "practice": 35, "completeness": 15, "fidelity": 15, "evidence": 10}
 AREAS = {"correctness": "Correctness", "security": "Security", "data": "Data protection", "governance": "Governance", "reliability": "Reliability",
          "observability": "Observability & cost", "clarity": "Clarity"}
@@ -26,6 +27,9 @@ C4 = "C4 model"
 # ---------- reading a map ----------
 def _t(p): return f"{p['label']} {' '.join(p['terms'])} {p.get('note') or ''}".lower()
 def find(m, rx, types=()): return [p for p in m["parts"] if p["type"] in types or (rx and re.search(rx, _t(p)))]
+def named(m, rx, types=()):
+    """Parts that ARE something, by name, note and type only: match words are for finding news, not for saying what a part is."""
+    return [p for p in m["parts"] if p["type"] in types or (rx and re.search(rx, f"{p['label']} {p.get('note') or ''}".lower()))]
 def ins(m, pid, kind=None): return [e for e in m["edges"] if e["b"] == pid and (kind is None or e["kind"] == kind)]
 def outs(m, pid, kind=None): return [e for e in m["edges"] if e["a"] == pid and (kind is None or e["kind"] == kind)]
 def by_id(m): return {p["id"]: p for p in m["parts"]}
@@ -176,7 +180,7 @@ def _r_ingestion(m):
     return True if fed else "nothing feeds the knowledge store"
 
 def _r_fallback(m):
-    gws = find(m, GATEWAY, ("gateway",))
+    gws = named(m, GATEWAY, ("gateway",))
     models = {p["id"] for p in find(m, "", ("model", "external"))}
     if not gws or not models: return None
     best = max(len([e for e in outs(m, g["id"]) if e["b"] in models]) for g in gws)
@@ -196,7 +200,7 @@ def _r_orchestrated(m):
     return True if ok else "model serving isn't managed by the control plane"
 
 def _r_traced(m):
-    gws = find(m, GATEWAY, ("gateway",)); obs = {p["id"] for p in find(m, OBS)}
+    gws = named(m, GATEWAY, ("gateway",)); obs = {p["id"] for p in find(m, OBS)}
     if not gws: return None
     if not obs: return "no observability"
     return True if all(any(e["b"] in obs for e in outs(m, g["id"])) for g in gws) else "model calls through the router aren't traced"
@@ -207,7 +211,7 @@ def _r_agent_traced(m):
     return True if obs and all(any(e["b"] in obs for e in outs(m, a["id"])) for a in ag) else "agent runs aren't traced"
 
 def _r_metered(m):
-    gws = find(m, GATEWAY, ("gateway",))
+    gws = named(m, GATEWAY, ("gateway",))
     if not gws: return None
     if find(m, r"cost|finops|budget|meter|billing|quota|chargeback"): return True
     return True if any(re.search(r"token|cost|usage|spend", e["verb"].lower()) for g in gws for e in outs(m, g["id"])) else "model usage isn't metered"
@@ -310,10 +314,10 @@ def score(m, project=None, overlay=None, review=None):
         parts["fidelity"] = 100 * got / out_of
     if overlay is not None and m["parts"]:
         matched = sum(1 for p in m["parts"] if overlay.get(p["id"], {}).get("development_count"))
-        parts["evidence"] = 100 * min(1.0, matched / len(m["parts"]) / 0.7)
+        parts["evidence"] = 100 * min(1.0, matched / len(m["parts"]) / 0.7) * (1.0 if review else UNREVIEWED)    # nobody has checked the words are about their parts
     have = {k: v for k, v in parts.items() if v is not None}
     total = sum(WEIGHTS[k] * v for k, v in have.items()) / max(1, sum(WEIGHTS[k] for k in have))
-    return {"total": round(total), "parts": {k: round(v) for k, v in have.items()}, "rules": results, "missing": [{"name": n, "why": w} for n, w in missing],
+    return {"total": round(total), "parts": {k: round(v) for k, v in have.items()}, "evidence_reviewed": bool(review), "rules": results, "missing": [{"name": n, "why": w} for n, w in missing],
             "brief": brief, "constraints": cons, "review": review, "waived": [{"id": r["id"], "title": r["title"], "reason": r["waived"]} for r in results if r["waived"]]}
 
 

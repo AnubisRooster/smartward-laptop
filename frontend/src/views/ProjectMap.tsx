@@ -60,7 +60,7 @@ function Scorecard({ sc, reviewed, notes, onReview, reviewing, onWaive, open }: 
         <span className="ml-auto text-zinc-500" title="Set a capable review model in Settings → Model for better reviews">{reviewed ? `reviewed by ${(rev?.model || '').replace(/^openrouter\//, '')}` : 'not reviewed by the second model'}</span>
         {onReview && <Btn small onClick={onReview} loading={reviewing} title="A second model checks arrow directions, protocols and the brief's requirements">{reviewed ? 'Review again' : 'Review now'}</Btn>}</summary>
       <div className="mt-2 grid gap-1 sm:grid-cols-5">{PARTS.map(([k, label, w]) => sc.parts[k] !== undefined && (
-        <div key={k} title={`${w}% of the score`}><div className="flex justify-between text-zinc-400"><span>{label}</span><span className={tone(sc.parts[k])}>{sc.parts[k]}</span></div>
+        <div key={k} title={`${w}% of the score` + (k === 'evidence' && !sc.evidence_reviewed ? ' · counted at 60% until a reviewer checks the words' : '')}><div className="flex justify-between text-zinc-400"><span>{label}{k === 'evidence' && !sc.evidence_reviewed ? ' (unchecked)' : ''}</span><span className={tone(sc.parts[k])}>{sc.parts[k]}</span></div>
           <div className="h-1 rounded bg-zinc-800"><div className={'h-1 rounded ' + (sc.parts[k] >= 85 ? 'bg-emerald-500' : sc.parts[k] >= 65 ? 'bg-amber-400' : 'bg-red-500')} style={{ width: sc.parts[k] + '%' }} /></div></div>))}</div>
       {Object.entries(byArea).map(([area, rs]) => (
         <div key={area} className="mt-2"><div className="font-medium text-zinc-300">{AREA[area] || area}</div>
