@@ -4,6 +4,7 @@ import { onPhone } from '../device';
 import { memoParts } from '../digestBrief';
 import { speech, useLoad, useNav, useSpeech } from '../hooks';
 import { Badge, Btn, Card, Err } from '../ui';
+import ShareButtons from './ShareButtons';
 
 const VERDICT: Record<string, [string, 'green' | 'red' | 'zinc']> = { supported: ['Supported so far', 'green'], contradicted: ['Contradicted so far', 'red'], open: ['Still open', 'zinc'] };
 const HEADS: [string, string][] = [['shifted', 'What shifted'], ['projects', 'What it may mean for your projects'], ['watch', 'What to watch next week'], ['questions', 'Open questions']];
@@ -39,6 +40,7 @@ export default function MemoCard() {
         <span className="ml-auto flex flex-wrap gap-2">
           {(data?.memos?.length || 0) > 1 && <select aria-label="Earlier memos" className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs" value={m?.id} onChange={e => pick(Number(e.target.value))}>
             {data.memos.map((x: any) => <option key={x.id} value={x.id}>Week {x.week.split('-W')[1]}, {x.week.split('-W')[0]}</option>)}</select>}
+          {m && <ShareButtons kind="memo" id={m.id} />}
           {m && speech.supported && (sp.on && sp.owner === 'memo' ? <Btn small onClick={() => speech.stop()}>■ Stop</Btn> : <Btn small onClick={read} title="Reads this memo aloud">🔊 Read aloud</Btn>)}
           {!onPhone && <Btn small onClick={write} loading={busy} title="Checks accepted implications, then writes this week's memo from the week's checked developments">{m && m.week === data?.latest?.week && !picked ? 'Rewrite' : 'Write this week’s memo'}</Btn>}
         </span>

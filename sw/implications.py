@@ -25,7 +25,7 @@ def gather(project, now=None):
     """The evidence the model will see: grounded developments in the project's domains, strongest first, and the trend picture."""
     now = now or db.now(); ds = project_domains(project, signals.domains()); names = {d["name"] for d in ds}
     rows = db.q("SELECT d.*, a.title, a.url, s.name source, s.kind skind FROM developments d JOIN articles a ON a.id=d.article_id JOIN sources s ON s.id=a.source_id "
-                "WHERE d.grounded=1 AND d.ts>? ORDER BY d.ts DESC LIMIT 600", (now - EVIDENCE_DAYS * 86400,))
+                "WHERE d.grounded=1 AND a.private=0 AND d.ts>? ORDER BY d.ts DESC LIMIT 600", (now - EVIDENCE_DAYS * 86400,))
     rank = {"measured": 0, "claimed": 1, "anecdotal": 2}; pool = []
     for r in rows:
         r["domains"] = json.loads(r["domains"] or "[]")

@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
+from sw import share as sharing
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -444,6 +445,19 @@ def implications_review():
         except Exception as e: implications.STATE["message"] = json.dumps({"error": str(e)[:240]})
         finally: implications.STATE["running"] = False
     implications.STATE["running"] = True; bg(job); return {"started": True}
+
+@app.get("/api/export/share/{kind}/{ident}")
+def share_export(kind: str, ident: int, format: str = "html", download: bool = False):
+    """A memo or a project's implications, formatted for pasting into Confluence. Private material is never included."""
+    try:
+        r = sharing.render(kind, ident, format)
+        if not download: return r
+        body = f"<!doctype html><meta charset=\"utf-8\"><title>{sharing.E(r['title'])}</title>\n{r['content']}" if format == "html" else r["content"]
+        kind_ = {"html": "text/html", "markdown": "text/markdown", "confluence": "application/xml"}[format]
+        return Response(body, media_type=kind_ + "; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'})
+    except sharing.Refused as e: bad(str(e), 403)
+    except LookupError as e: bad(str(e), 404)
+    except ValueError as e: bad(str(e))
 
 # ---------- what the page itself reports when something breaks (for diagnosing a window nobody can see into) ----------
 _clientlog = {"n": 0, "t": 0.0}

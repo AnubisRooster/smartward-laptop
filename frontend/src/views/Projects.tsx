@@ -4,6 +4,7 @@ import { useLoad, useNav } from '../hooks';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Spin, Title, cx } from '../ui';
 import { ask, toast } from '../feedback';
 import { AddSource } from './Sources';
+import ShareButtons from './ShareButtons';
 
 export default function Projects() {
   const { projectId, go } = useNav();
@@ -131,7 +132,7 @@ function Implications({ pid, onAccepted }: { pid: number; onAccepted: () => void
   return (
     <Card className="space-y-2">
       <div className="flex items-center justify-between gap-2"><div><h2 className="font-medium">Implications</h2><div className="text-xs text-zinc-500">Hypotheses from what you’ve been reading, each with its evidence. Not conclusions: you decide.</div></div>
-        <Btn small onClick={look} loading={busy}>Look for implications</Btn></div>
+        <div className="flex flex-wrap gap-2">{rows.some(r => r.status !== 'dismissed') && <ShareButtons kind="project" id={pid} />}<Btn small onClick={look} loading={busy}>Look for implications</Btn></div></div>
       {note && <div className="text-xs text-zinc-400" role="status">{note}</div>}
       {open.length === 0 && !busy && <div className="text-sm text-zinc-500">{rows.length ? 'Nothing new to review.' : 'None yet. Press “Look for implications” to check recent developments against this project.'}</div>}
       <ul className="space-y-2">{open.map(card)}</ul>
