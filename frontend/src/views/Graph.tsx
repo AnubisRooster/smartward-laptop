@@ -5,6 +5,8 @@ import { useLoad, useNav } from '../hooks';
 import { isLight } from '../theme';
 import { Badge, Btn, Card, Empty, Err, Field, inputCls, Modal, Seg, Title, cx } from '../ui';
 
+/** A theme's dot grows with the square root of its strength, so one dominant theme doesn't swallow the rest. */
+const radius = (n: any) => 3 + 2.2 * Math.sqrt(n.strength);
 const COLORS: Record<string, string> = { model: '#a78bfa', tool: '#34d399', library: '#22d3ee', company: '#fbbf24', person: '#f472b6', concept: '#818cf8', technique: '#fb923c', benchmark: '#f87171', paper: '#60a5fa', project: '#a3e635', other: '#a1a1aa' };
 
 export default function GraphView() {
@@ -14,8 +16,9 @@ export default function GraphView() {
   const { data, error, reload } = useLoad<any>('/graph', { scope, scope_id: scopeId, dormant });
   const { data: projs } = useLoad<any[]>('/projects'); const { data: srcs } = useLoad<any[]>('/sources');
   const sel = themeId;
+  const [hidden, setHidden] = useState<string[]>([]); const [q, setQ] = useState(''); const [hover, setHover] = useState<number | null>(null); const [pinned, setPinned] = useState(0);
   const box = useRef<HTMLDivElement>(null); const fg = useRef<any>(null); const [sz, setSz] = useState({ w: 400, h: 400 });
-  useEffect(() => { fg.current?.d3Force?.('charge')?.strength(-160); fg.current?.d3Force?.('link')?.distance(70); }, [data]);
+  useEffect(() => { fg.current?.d3Force?.('charge')?.strength(-260).distanceMax(260); fg.current?.d3Force?.('link')?.distance(80); }, [data]);
   useEffect(() => { const el = box.current; if (!el) return; const ro = new ResizeObserver(() => setSz({ w: el.clientWidth, h: el.clientHeight })); ro.observe(el); return () => ro.disconnect(); }, [mode]);
   // Keep each node's object (and so its position) across refreshes: the graph updates in place instead of re-laying out.
   const nodeCache = useRef(new Map<number, any>()); const fitted = useRef('');
@@ -23,11 +26,25 @@ export default function GraphView() {
   const gdata = useMemo(() => {
     if (!data) return { nodes: [], links: [] };
     const seen = new Set<number>();
-    const nodes = data.themes.map((t: any) => { seen.add(t.id); const old = nodeCache.current.get(t.id); const n = old ? Object.assign(old, t, { val: 2 + t.strength * 3 }) : { ...t, val: 2 + t.strength * 3 }; nodeCache.current.set(t.id, n); return n; });
-    for (const k of [...nodeCache.current.keys()]) if (!seen.has(k)) nodeCache.current.delete(k);
-    return { nodes, links: data.edges.map((e: any) => ({ source: e.a, target: e.b, w: e.weight })) };
-  }, [data]);
-  const themes: any[] = data?.themes || [];
+    const nodes = data.themes.filter((t: any) => !hidden.includes(t.type)).map((t: any) => { seen.add(t.id); const old = nodeCache.current.get(t.id); const n = old ? Object.assign(old, t, { val: 2 + t.strength * 3 }) : { ...t, val: 2 + t.strength * 3 }; nodeCache.current.set(t.id, n); return n; });
+    for (const k of [...nodeCache.current.keys()]) if (!data.themes.some((t: any) => t.id === k)) nodeCache.current.delete(k);
+    return { nodes, links: data.edges.filter((e: any) => seen.has(e.a) && seen.has(e.b)).map((e: any) => ({ source: e.a, target: e.b, w: e.weight })) };
+  }, [data, hidden]);
+  const allThemes: any[] = data?.themes || []; const types = [...new Set(allThemes.map(t => t.type))].sort();
+  const themes: any[] = allThemes.filter(t => !hidden.includes(t.type) && (!q.trim() || t.name.toLowerCase().includes(q.trim().toLowerCase())));
+  // Hovering a theme (or the selected one) lights it and the themes it connects to; everything else steps back.
+  const focus = hover ?? sel ?? null;
+  const near = useMemo(() => {
+    const m = new Set<number>(); if (focus == null || !data) return m;
+    for (const e of data.edges) { if (e.a === focus) m.add(e.b); else if (e.b === focus) m.add(e.a); }
+    return m;
+  }, [data, focus]);
+  const idOf = (x: any) => (typeof x === 'object' ? x.id : x);
+  const centre = (id: number) => { const n = nodeCache.current.get(id); if (n?.x != null && fg.current) { fg.current.centerAt(n.x, n.y, 500); if (fg.current.zoom() < 2) fg.current.zoom(2.5, 500); } };
+  useEffect(() => { if (sel != null && mode === 'graph') centre(sel); }, [sel]);
+  const zoomBy = (f: number) => fg.current?.zoom(fg.current.zoom() * f, 250);
+  const unpin = () => { for (const n of nodeCache.current.values()) { n.fx = undefined; n.fy = undefined; } setPinned(0); fg.current?.d3ReheatSimulation?.(); };
+  const matches = q.trim() ? themes.slice(0, 6) : [];
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -41,26 +58,38 @@ export default function GraphView() {
               {(projs || []).map(p => <option key={'p' + p.id} value={`project:${p.id}`}>Project: {p.name}</option>)}
               {(srcs || []).map(s => <option key={'s' + s.id} value={`source:${s.id}`}>Source: {s.name}</option>)}</select>
             <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={dormant} onChange={e => setDormant(e.target.checked)} />Show dormant</label>
-            <span className="text-xs text-zinc-600">Strongest themes, with older mentions fading.</span></div>
-          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400" aria-label="Legend">{[...new Set(themes.map(t => t.type))].sort().map(t => <li key={t} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: COLORS[t] || COLORS.other }} aria-hidden />{t}</li>)}</ul></div>
+            <input className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs sm:max-w-56" aria-label="Find a theme" placeholder="Find a theme…" value={q} onChange={e => setQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && matches[0]) go('graph', { themeId: matches[0].id }); if (e.key === 'Escape') setQ(''); }} />
+            {pinned > 0 && <Btn small onClick={unpin} title="Dragging a theme pins it where you drop it">Unpin {pinned}</Btn>}
+            <span className="text-xs text-zinc-600">Strongest themes, with older mentions fading. Tap a type to hide it; drag a theme to pin it.</span></div>
+          {matches.length > 0 && mode === 'graph' && <ul className="flex flex-wrap gap-1" aria-label="Matches">{matches.map(t => <li key={t.id}><button className="rounded-full border border-zinc-700 px-2 py-0.5 text-xs hover:bg-zinc-800" onClick={() => { go('graph', { themeId: t.id }); centre(t.id); }}>{t.name}</button></li>)}</ul>}
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400" aria-label="Legend">{types.map(t => <li key={t}><button aria-pressed={!hidden.includes(t)} onClick={() => setHidden(h => h.includes(t) ? h.filter(x => x !== t) : [...h, t])} className={cx('flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-zinc-800', hidden.includes(t) && 'line-through opacity-40')}><span className="h-2 w-2 rounded-full" style={{ background: COLORS[t] || COLORS.other }} aria-hidden />{t}</button></li>)}</ul></div>
         <Err>{error}</Err>
         <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
-          {themes.length === 0 ? (
+          {themes.length === 0 && allThemes.length > 0 ? (
+            <Empty icon="⁂" title="Nothing matches"><div className="mt-3"><Btn onClick={() => { setHidden([]); setQ(''); }}>Clear search and type filters</Btn></div></Empty>
+          ) : themes.length === 0 ? (
             <Empty icon="⁂" title="No themes in this scope">{scope !== 'all' || !dormant ? <>Themes appear as articles are read and indexed. <div className="mt-3"><Btn onClick={() => { setScope('all'); setScopeId(undefined); setDormant(true); }}>Show every theme</Btn></div></> : 'Themes appear as articles are indexed.'}</Empty>
           ) : mode === 'graph' ? (
             <ForceGraph2D ref={fg} onEngineStop={() => { if (fitted.current !== scopeKey) { fitted.current = scopeKey; fg.current?.zoomToFit(400, 70); } }} d3VelocityDecay={0.3} width={sz.w} height={sz.h} graphData={gdata} backgroundColor="rgba(0,0,0,0)" cooldownTicks={120}
               nodeLabel={(n: any) => `${n.name} (${n.type})`} onNodeClick={(n: any) => go('graph', { themeId: n.id })}
-              linkColor={() => 'rgba(113,113,122,.5)'} linkWidth={(l: any) => Math.min(4, l.w)}
+              nodePointerAreaPaint={(n: any, color: string, ctx: CanvasRenderingContext2D) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(n.x, n.y, radius(n) + 2, 0, 2 * Math.PI); ctx.fill(); }}
+              onNodeHover={(n: any) => setHover(n ? n.id : null)} onNodeDragEnd={(n: any) => { n.fx = n.x; n.fy = n.y; setPinned([...nodeCache.current.values()].filter(x => x.fx != null).length); }}
+              onBackgroundClick={() => { if (sel != null) go('graph', { themeId: null }); }}
+              linkColor={(l: any) => focus == null ? 'rgba(113,113,122,.5)' : idOf(l.source) === focus || idOf(l.target) === focus ? 'rgba(129,140,248,.95)' : 'rgba(113,113,122,.12)'}
+              linkWidth={(l: any) => Math.min(4, l.w) * (focus != null && (idOf(l.source) === focus || idOf(l.target) === focus) ? 1.5 : 1)}
               nodeCanvasObject={(n: any, ctx: CanvasRenderingContext2D, k: number) => {
-                const r = 3 + n.strength * 2; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.fillStyle = COLORS[n.type] || COLORS.other; ctx.globalAlpha = n.dormant ? 0.35 : 1; ctx.fill();
+                const r = radius(n); ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.fillStyle = COLORS[n.type] || COLORS.other; const lit = focus == null || n.id === focus || near.has(n.id); ctx.globalAlpha = (n.dormant ? 0.35 : 1) * (lit ? 1 : 0.15); ctx.fill();
                 if (n.id === sel) { ctx.lineWidth = 1.5 / k; ctx.strokeStyle = isLight() ? '#000' : '#fff'; ctx.stroke(); }
-                ctx.globalAlpha = 1; if (k < 0.8 && n.strength < 2 && n.id !== sel) return; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = isLight() ? '#27272a' : '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k);
+                ctx.globalAlpha = lit ? 1 : 0.2; if (!(focus != null && lit) && k < 0.8 && n.strength < 2 && n.id !== sel) return; ctx.font = `${Math.max(3, 11 / k)}px sans-serif`; ctx.fillStyle = isLight() ? '#27272a' : '#e4e4e7'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y + r + 8 / k); ctx.globalAlpha = 1;
               }} />
           ) : (
             <ul className="h-full overflow-y-auto" aria-label="Themes">{themes.map(t => (
               <li key={t.id}><button onClick={() => go('graph', { themeId: t.id })} className={cx('flex w-full items-center gap-3 border-b border-zinc-800/70 px-4 py-2.5 text-left hover:bg-zinc-900', sel === t.id && 'bg-zinc-900')}>
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: COLORS[t.type] || COLORS.other }} /><span className="flex-1 text-sm">{t.name}</span><Badge>{t.type}</Badge>
                 <span className="w-24 text-right text-xs text-zinc-500">strength {t.strength.toFixed(1)} · {t.articles}</span></button></li>))}</ul>)}
+          {mode === 'graph' && themes.length > 0 && <div className="absolute bottom-3 right-3 flex flex-col gap-1">
+            <Btn small onClick={() => zoomBy(1.5)} label="Zoom in">+</Btn><Btn small onClick={() => zoomBy(1 / 1.5)} label="Zoom out">−</Btn><Btn small onClick={() => fg.current?.zoomToFit(400, 70)} label="Fit everything">⤢</Btn></div>}
         </div>
       </section>
       {sel != null && <ThemeDetail id={sel} onClose={() => go('graph', { themeId: null })} onChanged={reload} openArticle={openArticle} />}
