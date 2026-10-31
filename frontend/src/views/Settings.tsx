@@ -39,7 +39,7 @@ export default function Settings({ phone = false }: { phone?: boolean }) {
       {phone && <div className="rounded-lg border border-zinc-800 p-3 text-xs text-zinc-500">From your phone you can change the model, the budget and the voice. Everything else, including keys, the app lock, sources and backups, is changed on the laptop.</div>}
 
       {!phone && <><Section title="Notifications" desc="Desktop notifications while SmartWard is running (it keeps running in the tray when you close the window). With the app lock on, they never show titles.">
-        {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval']] as const).map(([k, label]) =>
+        {([['notify_articles', 'New articles that match my interests'], ['notify_sources', 'A source stops refreshing'], ['notify_approvals', 'A chat is waiting for my approval'], ['notify_memo', 'The weekly memo is ready']] as const).map(([k, label]) =>
           <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s[k] !== false} onChange={e => save({ [k]: e.target.checked })} />{label}</label>)}
       </Section></>}
 
@@ -71,6 +71,8 @@ export default function Settings({ phone = false }: { phone?: boolean }) {
 
       {!phone && <><Section title="Background refresh" desc="While SmartWard is running it checks your sources and indexes new articles. Close it and nothing runs.">
         <Row><span>Check sources every</span><div className="flex gap-2"><select className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1" value={s.refresh_minutes} onChange={e => save({ refresh_minutes: Number(e.target.value) })}>{[15, 30, 60, 120, 360].map(m => <option key={m} value={m}>{m < 60 ? m + ' min' : m / 60 + ' h'}</option>)}</select><Btn onClick={async () => { await post('/refresh'); setMsg('Refreshing…'); reloadInfo(); }}>Refresh now</Btn></div></Row>
+        <Row><label className="flex items-center gap-2"><input type="checkbox" checked={!!s.memo_auto} onChange={e => save({ memo_auto: e.target.checked })} />Write the weekly memo on</label>
+          <select aria-label="Memo day" className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1" value={s.memo_day ?? 0} disabled={!s.memo_auto} onChange={e => save({ memo_day: Number(e.target.value) })}>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d, i) => <option key={d} value={i}>{d}</option>)}</select></Row>
         <div className="space-y-1 rounded-lg bg-zinc-800/60 p-3 text-sm">
           <div>{p.running ? <><Spin /> {p.step || 'Working'}… {p.done}/{p.total}</> : 'Idle'}{p.last_run ? <span className="text-zinc-500"> · last run {new Date(p.last_run * 1000).toLocaleTimeString()}</span> : ''}</div>
           <div className="text-zinc-400">Waiting to be indexed: {p.waiting ?? 0} · waiting for the graph: {p.graph_waiting ?? 0} · left out of the graph after two tries: {p.graph_left_out ?? 0} · couldn’t be indexed: {p.failed ?? 0}</div>

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications
+from sw import db, llm, sources, pipeline, graph, projects, chat, tts, events, stt, openrouter, remote, awake, tailscale, signals, developments, implications, memo
 
 app = FastAPI(title="SmartWard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -404,6 +404,47 @@ def implications_dismiss(hid: int, body: dict):
     except LookupError as e: bad(str(e), 404)
     return {"ok": True}
 
+# ---------- the weekly memo, and checking accepted hypotheses against what happened since ----------
+def _memo_job():
+    memo.STATE.update(running=True, message="")
+    try: memo.STATE["message"] = json.dumps({"week": memo.generate()["week"]})
+    except llm.Unavailable as e: memo.STATE["message"] = json.dumps({"error": str(e)[:240] + " (waiting is fine; try again later)"})
+    except Exception as e: memo.STATE["message"] = json.dumps({"error": str(e)[:240]})
+    finally: memo.STATE["running"] = False
+
+@app.post("/api/memo/run")
+def memo_run():
+    """Write (or rewrite) this week's memo. Runs in the background; poll /api/memo/status."""
+    if memo.STATE["running"]: bad("Already running.", 409)
+    memo.STATE["running"] = True; bg(_memo_job); return {"started": True}
+
+@app.get("/api/memo/status")
+def memo_status():
+    try: last = json.loads(memo.STATE["message"]) if memo.STATE["message"] else None
+    except ValueError: last = None
+    return {"running": memo.STATE["running"], "last": last}
+
+@app.get("/api/memos")
+def memos_list(): return {"memos": memo.listing(), "latest": memo.get()}
+
+@app.get("/api/memos/{mid}")
+def memos_get(mid: int):
+    m = memo.get(mid)
+    if not m: bad("No such memo", 404)
+    return m
+
+@app.post("/api/implications/review")
+def implications_review():
+    """Check every accepted hypothesis against the developments since. Runs in the background; poll /api/implications/status."""
+    if implications.STATE["running"]: bad("Already running.", 409)
+    def job():
+        implications.STATE.update(running=True, message="")
+        try: implications.STATE["message"] = json.dumps(implications.review())
+        except llm.Unavailable as e: implications.STATE["message"] = json.dumps({"error": str(e)[:240] + " (waiting is fine; try again later)"})
+        except Exception as e: implications.STATE["message"] = json.dumps({"error": str(e)[:240]})
+        finally: implications.STATE["running"] = False
+    implications.STATE["running"] = True; bg(job); return {"started": True}
+
 # ---------- what the page itself reports when something breaks (for diagnosing a window nobody can see into) ----------
 _clientlog = {"n": 0, "t": 0.0}
 @app.post("/api/clientlog")
@@ -481,6 +522,7 @@ def project_put(pid: int, body: dict):
     return {"ok": True}
 @app.delete("/api/projects/{pid}")
 def project_del(pid: int):
+    db.x("DELETE FROM hypothesis_checks WHERE hid IN (SELECT id FROM hypotheses WHERE project_id=?)", (pid,))
     for t in ("items", "project_links", "brief_history", "hypotheses"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
     db.x("DELETE FROM projects WHERE id=?", (pid,)); return {"ok": True}
 @app.post("/api/projects/{pid}/suggest")
@@ -635,7 +677,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}
@@ -736,6 +778,7 @@ def _scheduler():
                 pipeline.refresh_all()
             elif not pipeline.STATE["running"] and pipeline.counts()["waiting"] > 0:
                 pipeline.run()
+            if memo.due(): memo.STATE["running"] = True; bg(_memo_job)
         except Exception: pass
         time.sleep(60)
 

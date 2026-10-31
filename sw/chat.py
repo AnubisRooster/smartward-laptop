@@ -3,10 +3,10 @@ import json, re, threading, uuid
 from . import db, llm, pipeline, graph, sources, projects
 
 MODES = {
-    "brainstorm": ("Brainstorm", "Explore ideas with the strategist, grounded in what you've read.", ["search_library", "graph_neighbors", "open_item", "fetch_url", "add_source", "save_item"]),
-    "critique": ("Critique", "Pressure-test a plan or idea; the strategist argues against it.", ["search_library", "graph_neighbors", "open_item", "fetch_url", "save_item"]),
-    "research": ("Research plan", "Turn a question into a plan: what to read, what to check.", ["search_library", "graph_neighbors", "open_item", "fetch_url", "add_source", "save_item"]),
-    "weekly": ("Weekly review", "Look back over the week's reading and your projects.", ["search_library", "graph_neighbors", "open_item", "save_item"]),
+    "brainstorm": ("Brainstorm", "Explore ideas with the strategist, grounded in what you've read.", ["search_library", "graph_neighbors", "what_shifted", "open_item", "fetch_url", "add_source", "save_item"]),
+    "critique": ("Critique", "Pressure-test a plan or idea; the strategist argues against it.", ["search_library", "graph_neighbors", "what_shifted", "open_item", "fetch_url", "save_item"]),
+    "research": ("Research plan", "Turn a question into a plan: what to read, what to check.", ["search_library", "graph_neighbors", "what_shifted", "open_item", "fetch_url", "add_source", "save_item"]),
+    "weekly": ("Weekly review", "Look back over the week's reading and your projects.", ["search_library", "graph_neighbors", "what_shifted", "open_item", "save_item"]),
     "onboarding": ("Onboarding", "A guided interview to set up your interests and projects.", []),
 }
 PERSONA = {
@@ -22,6 +22,8 @@ TOOLS = {
     "open_item": {"description": "Open an article from the library by id and read it.", "parameters": {"type": "object", "properties": {"article_id": {"type": "integer"}}, "required": ["article_id"]}},
     "fetch_url": {"description": "Read a public web page (needs the user's approval).", "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}},
     "add_source": {"description": "Follow a new feed or page (needs the user's approval).", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["rss", "arxiv", "hn", "github", "web"]}, "url": {"type": "string"}, "query": {"type": "string"}}, "required": ["kind"]}},
+    "what_shifted": {"description": "What has been changing in the user's domains lately, counted from their own reading: trend signals, recent checked developments (with article ids to cite), the weekly memo and the open hypotheses for their projects.",
+                     "parameters": {"type": "object", "properties": {"domain": {"type": "string", "description": "A domain or topic, e.g. 'KV cache'; empty for all"}, "weeks": {"type": "integer", "description": "How many weeks back (1-8, default 2)"}}}},
     "save_item": {"description": "Record a decision, open question or action item on the current project (always needs approval).", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["decision", "question", "action"]}, "text": {"type": "string"}}, "required": ["kind", "text"]}},
 }
 _waiters = {}            # approval id -> threading.Event
@@ -66,6 +68,9 @@ def run_tool(name, args, conv):
         if name == "search_library":
             res = pipeline.passages(str(args.get("query", "")), k=5)
             return json.dumps([{"article_id": r["article_id"], "title": r["title"], "excerpt": r["text"][:300]} for r in res]) or "[]"
+        if name == "what_shifted":
+            from . import memo
+            return json.dumps(memo.what_shifted(str(args.get("domain") or ""), args.get("weeks") or 2))
         if name == "graph_neighbors": return json.dumps(graph.neighbors(str(args.get("theme", ""))) or "No such theme.")
         if name == "open_item":
             a = db.q("SELECT title,text,teaser,private FROM articles WHERE id=?", (int(args.get("article_id", 0)),), one=True)

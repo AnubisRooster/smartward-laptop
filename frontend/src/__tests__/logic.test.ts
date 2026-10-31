@@ -205,3 +205,15 @@ describe('an old window after an update', () => {
     expect(reloadOnce(1_031_000, store, go)).toBe(true); expect(reloads).toBe(2);
   });
 });
+
+import { memoParts } from '../digestBrief';
+describe('memo read aloud', () => {
+  it('reads the sections in order, names projects, skips open verdicts and empty sections', () => {
+    const p = memoParts({ week: '2026-W44', shifted: [{ text: 'KV cache **eviction** got faster.' }], projects: [{ text: 'Benchmark long prompts.', project: 'vLLM' }], watch: [],
+      questions: [{ text: 'Is decode the bottleneck?' }], standing: [{ headline: 'Prefill matters', verdict: 'supported' }, { headline: 'Other', verdict: 'open' }] });
+    expect(p[0]).toBe('Your strategy memo for week 44.');
+    expect(p).toContain('For vLLM: Benchmark long prompts.'); expect(p).toContain('Prefill matters: supported so far.');
+    expect(p.join(' ')).not.toContain('**'); expect(p).not.toContain('What to watch next week.'); expect(p.join(' ')).not.toContain('Other');
+  });
+  it('says so when a memo is empty', () => { expect(memoParts({ week: '2026-W01', shifted: [], projects: [], watch: [], questions: [] })[1]).toMatch(/nothing/); });
+});

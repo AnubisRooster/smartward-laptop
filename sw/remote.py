@@ -18,8 +18,8 @@ SAFE = ("GET", "HEAD", "OPTIONS")
 # changing sources, and the laptop's own microphone.
 _R = lambda m, p: (m, re.compile("^" + p + "$"))
 ALLOW = [
-    _R("GET", r"/api/(status|settings|sources|digest|graph|themes|projects|domains|signals|developments|developments/status|chat/modes|conversations|approvals|search|tts/status|articles|help)"),
-    _R("GET", r"/api/(articles|themes|projects|conversations)/\d+"),
+    _R("GET", r"/api/(status|settings|sources|digest|graph|themes|projects|domains|signals|developments|developments/status|memos|memo/status|implications/status|chat/modes|conversations|approvals|search|tts/status|articles|help)"),
+    _R("GET", r"/api/(articles|themes|projects|conversations|memos)/\d+"),
     _R("POST", r"/api/articles/mark-read"), _R("POST", r"/api/articles/\d+/(summary|full|discuss)"), _R("PATCH", r"/api/articles/\d+"),
     _R("POST", r"/api/share"), _R("POST", r"/api/tts"), _R("POST", r"/api/voice/transcribe"),
     _R("POST", r"/api/conversations"), _R("POST", r"/api/conversations/\d+/(send|cancel)"), _R("DELETE", r"/api/conversations/\d+"),

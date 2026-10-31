@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, conv_id INTEGER, rol
 CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, conv_id INTEGER, tool TEXT, title TEXT, detail TEXT, args TEXT, status TEXT DEFAULT 'pending', auto INTEGER DEFAULT 0, ts REAL);
 CREATE TABLE IF NOT EXISTS usage(id INTEGER PRIMARY KEY, ts REAL, feature TEXT, model TEXT, tokens_in INTEGER, tokens_out INTEGER, cost REAL, local INTEGER);
 CREATE TABLE IF NOT EXISTS digests(id INTEGER PRIMARY KEY, created REAL, data TEXT);
+CREATE TABLE IF NOT EXISTS memos(id INTEGER PRIMARY KEY, week TEXT UNIQUE, data TEXT, created REAL, model TEXT);
+CREATE TABLE IF NOT EXISTS hypothesis_checks(id INTEGER PRIMARY KEY, hid INTEGER, ts REAL, verdict TEXT, supports TEXT DEFAULT '[]', contradicts TEXT DEFAULT '[]', seen TEXT DEFAULT '[]', note TEXT, model TEXT);
+CREATE INDEX IF NOT EXISTS ix_hcheck ON hypothesis_checks(hid);
 """
 
 def _connect():
@@ -83,7 +86,7 @@ DEFAULTS = {
     "auto_approve": False, "onboarding_completed": False,
     "refresh_minutes": 60, "lock_enabled": False, "lock_after": 60, "lock_idle": 15,
     "voice_rate": 1.0, "voice_name": "", "digest_notify": False,
-    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free", "openrouter/cohere/north-mini-code:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True,
+    "cloud_scope": "analysis", "analysis_model": "openrouter/poolside/laguna-s-2.1:free", "analysis_fallbacks": ["openrouter/recursive/flint-v1.0:free", "openrouter/cohere/north-mini-code:free"], "analysis_workers": 3, "remote_enabled": False, "remote_keep_awake": True, "remote_login": "", "remote_host": "", "remote_hash": "", "remote_sessions": {}, "remote_log": [], "notify_articles": True, "notify_sources": True, "notify_approvals": True, "notify_memo": True, "memo_auto": False, "memo_day": 0,
     # Natural read-aloud voice (Kokoro, on this machine). engine: auto | kokoro | browser
     "tts_engine": "auto", "tts_url": "http://127.0.0.1:8880", "tts_voice": "af_heart", "tts_profiles": {}, "tts_profile": "",
     "private_repo_local_only": True, "github_token": "", "lock_hash": "", "api_key": "",

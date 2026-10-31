@@ -94,6 +94,7 @@ function Project({ id, onBack, onChanged }: { id: number; onBack: () => void; on
 }
 
 
+const STANDING: Record<string, [string, 'green' | 'red' | 'zinc']> = { supported: ['Holding up so far', 'green'], contradicted: ['Contradicted since', 'red'], open: ['Still open', 'zinc'] };
 const DIRECTION: Record<string, [string, 'green' | 'red' | 'indigo' | 'zinc']> = { accelerates: ['Could speed this up', 'green'], threatens: ['Could undercut part of this', 'red'], enables: ['Could open something new', 'indigo'], neutral: ['Worth knowing', 'zinc'] };
 
 /** What recent developments might mean for this project: hypotheses with their evidence, for you to accept into the project or dismiss. */
@@ -116,12 +117,14 @@ function Implications({ pid, onAccepted }: { pid: number; onAccepted: () => void
   const card = (r: any) => (
     <li key={r.id} className="rounded-lg border border-zinc-800 p-3">
       <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{r.headline}</span><Badge tone={DIRECTION[r.direction]?.[1]}>{DIRECTION[r.direction]?.[0] || r.direction}</Badge><Badge>{r.confidence} confidence</Badge>
-        {r.status === 'accepted' && <Badge tone="green">Added to actions</Badge>}{r.status === 'dismissed' && <Badge>Dismissed{r.reason ? `: ${r.reason}` : ''}</Badge>}</div>
+        {r.status === 'accepted' && <Badge tone="green">Added to actions</Badge>}{r.standing && <Badge tone={STANDING[r.standing.verdict]?.[1]}>{STANDING[r.standing.verdict]?.[0]}</Badge>}{r.status === 'dismissed' && <Badge>Dismissed{r.reason ? `: ${r.reason}` : ''}</Badge>}</div>
       <p className="mt-1 text-sm text-zinc-300">{r.implication}</p>
       {r.falsifier && <p className="mt-1 text-xs text-zinc-500"><span className="font-medium">What would change my mind:</span> {r.falsifier}</p>}
       {r.action && <p className="mt-1 text-xs text-zinc-500"><span className="font-medium">A small next step:</span> {r.action}</p>}
       <details className="mt-1"><summary className="cursor-pointer text-xs text-zinc-500">Evidence ({r.evidence.length}{r.counter.length ? `, ${r.counter.length} against` : ''})</summary>
         <ul className="mt-1 space-y-1">{r.evidence.map((i: number) => cite(i))}{r.counter.map((i: number) => cite(i, true))}</ul></details>
+      {r.standing && (r.standing.supports.length + r.standing.contradicts.length) > 0 && <details className="mt-1"><summary className="cursor-pointer text-xs text-zinc-500">Since you accepted it: {r.standing.supports.length} for, {r.standing.contradicts.length} against · checked {ago(r.standing.checked)}</summary>
+        <ul className="mt-1 space-y-1">{r.standing.supports.map((i: number) => cite(i))}{r.standing.contradicts.map((i: number) => cite(i, true))}</ul></details>}
       {r.status === 'new' && <div className="mt-2 flex gap-2"><Btn small kind="primary" onClick={() => act(() => post(`/implications/${r.id}/accept`), true)}>Add as an action</Btn>
         <Btn small onClick={async () => { const why = await ask.prompt({ title: 'Dismiss this?', body: 'Optionally say why, so it’s clear later.', label: 'Reason (optional)', confirmLabel: 'Dismiss' }); if (why !== null) act(() => post(`/implications/${r.id}/dismiss`, { reason: why })); }}>Dismiss</Btn></div>}
     </li>);
