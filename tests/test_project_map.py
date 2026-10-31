@@ -116,87 +116,119 @@ class Overlay(unittest.TestCase):
         self.assertIn("## Where it lands on the stack", out); self.assertIn("**KV cache**: 1 recent development (0 measured)", out)
 
 
+def as_json(text):
+    """A map's lines in the drafting JSON shape, as a model would send them."""
+    m = maps.parse(text); names = {p["id"]: p["label"] for p in m["parts"]}
+    return {"pattern": m["pattern"], "zones": m["zones"],
+            "parts": [{"name": p["label"], "type": p["type"], "zone": p["zone"], "terms": p["terms"], "suggested": p["suggested"], "why": p["note"]} for p in m["parts"]],
+            "connections": [{"from": names[e["a"]], "to": names[e["b"]], "verb": e["verb"], "protocol": e["protocol"], "kind": e["kind"]} for e in m["edges"]]}
+
+
 class Drafting(unittest.TestCase):
     def setUp(self):
+        from tests.test_rules import GOOD
         h.reset(); db.set_setting("api_key", "sk-test"); db.set_setting("model", "openrouter/anthropic/claude-sonnet-4-5"); db.set_setting("cloud_scope", "analysis")
-        db.set_setting("design_model", "")
-        self.pid = project(name="AI platform", goal="An enterprise AI platform with a coding agent, harness and model router.")
+        db.set_setting("design_model", ""); db.set_setting("analysis_model", "openrouter/judge:free"); db.set_setting("analysis_fallbacks", [])
+        self.pid = project(name="AI platform", goal="An enterprise AI platform that will include a coding agent, harness and model router.")
+        self.good = as_json(GOOD)
+        weak = GOOD
+        for line in ("Secrets (service): vault\n", "Audit log (datastore): audit, siem\n", "Job queue (service): temporal, queue\n"): weak = weak.replace(line, "")
+        weak = "\n".join(l for l in weak.splitlines() if not any(x in l for x in ("Secrets", "Audit log", "Job queue"))) + "\nDevelopers -> Coding agent: asks\n"
+        self.weak = as_json(weak)
+        poor = {**self.weak, "parts": self.weak["parts"][:6], "connections": []}
+        self.poor = poor
         self.sleep = mock.patch("sw.llm.time.sleep"); self.sleep.start()
     def tearDown(self): self.sleep.stop()
 
-    FIRST = {"pattern": "agent_platform", "zones": ["On-prem data center", "AWS"], "parts": [
-        {"name": "Coding agent", "type": "agent", "terms": ["claude code", "codex"]}, {"name": "Model router", "type": "gateway", "terms": ["routellm"]},
-        {"name": "Bedrock", "type": "external", "zone": "AWS", "terms": ["bedrock"]}, {"name": "Cache<script>", "type": "weird", "terms": ["x"]}],
-        "connections": [{"from": "Coding agent", "to": "Bedrock", "verb": "calls"}, {"from": "Coding agent", "to": "Ghost"}]}
-    SECOND = {"pattern": "agent_platform", "zones": ["On-prem data center", "AWS"], "parts": [
-        {"name": "Coding agent", "type": "agent", "terms": ["claude code", "codex"]}, {"name": "Model router", "type": "gateway", "terms": ["routellm"]},
-        {"name": "Bedrock", "type": "external", "zone": "AWS", "terms": ["bedrock"]},
-        {"name": "Sandbox", "type": "service", "terms": ["sandbox"], "suggested": True, "why": "runs generated code"},
-        {"name": "Identity", "type": "service", "terms": ["sso", "rbac"], "suggested": True, "why": "who may use what"},
-        {"name": "Observability", "type": "service", "terms": ["tracing", "evals"], "suggested": True, "why": "traces and evals"},
-        {"name": "Vector store", "type": "datastore", "terms": ["vector database"], "suggested": True, "why": "company data"},
-        {"name": "Skill registry", "type": "service", "terms": ["mcp", "agent skills"], "suggested": True, "why": "approved tools"},
-        {"name": "Cache<script>", "type": "datastore", "terms": ["x"]}],
-        "connections": [{"from": "Coding agent", "to": "Model router", "verb": "sends prompts", "protocol": "OpenAI API"}, {"from": "Model router", "to": "Bedrock", "verb": "routes"},
-                        {"from": "Coding agent", "to": "Sandbox", "verb": "runs code"}, {"from": "Identity", "to": "Model router", "verb": "authorizes", "kind": "control"},
-                        {"from": "Coding agent", "to": "Observability", "verb": "sends traces"}, {"from": "Coding agent", "to": "Vector store", "verb": "retrieves"},
-                        {"from": "Coding agent", "to": "Skill registry", "verb": "loads skills", "protocol": "MCP"}, {"from": "Coding agent", "to": "Cachescript", "verb": "caches"}]}
+    def run_draft(self):
+        """Start a draft with background work run inline, then take the finished result the way the page does."""
+        with mock.patch.object(h.api, "bg", lambda fn, *a: fn(*a)): self.assertTrue(c.post(f"/api/projects/{self.pid}/map/draft").json()["started"])
+        st = c.get(f"/api/projects/{self.pid}/map/draft/status", params={"take": True}).json()
+        self.assertFalse(st["running"]); self.assertIsNone(st["error"], st["error"])
+        self.assertIsNone(c.get(f"/api/projects/{self.pid}/map/draft/status").json()["result"])          # handed over once
+        return st["result"]
 
-    def test_a_draft_uses_the_main_model_is_checked_revised_cleaned_and_not_saved(self):
-        tid = db.x("INSERT INTO themes(name,key,type,created) VALUES('Claude Code','claude code','product',?)", (NOW,))
-        for i in range(3): db.x("INSERT INTO mentions(article_id,theme_id,ts) VALUES(?,?,?)", (i + 1, tid, NOW))
-        calls = []
-        def fake(**kw): calls.append(kw); return answer(self.FIRST if len(calls) == 1 else self.SECOND)
-        with mock.patch("litellm.completion", side_effect=fake): d = c.post(f"/api/projects/{self.pid}/map/draft").json()
-        self.assertEqual(calls[0]["model"], "openrouter/anthropic/claude-sonnet-4-5"); self.assertEqual(len(calls), 2)
-        p1 = calls[0]["messages"][0]["content"]; self.assertIn("Enterprise agent platform", p1); self.assertIn("Claude Code", p1)       # the pattern and the library's words
-        self.assertIn("calls “Bedrock” directly", calls[1]["messages"][0]["content"])                                                    # the revision is told what was wrong
-        self.assertTrue(d["revised"]); self.assertEqual([x for x in d["checks"] if x["level"] == "warn"], []); self.assertIn("~Sandbox (service): sandbox  # runs generated code", d["text"])
-        self.assertIsNone(maps.get(self.pid))
+    def fake(self, drafts, repair=None, review=None):
+        calls = {"draft": [], "review": [], "repair": []}; it = iter(drafts)
+        def f(**kw):
+            msg = kw["messages"][0]["content"]
+            kind = "review" if msg.startswith("You review") else "repair" if "A review scored it" in msg else "draft"
+            calls[kind].append(kw)
+            if kind == "review": return answer(review or {"implausible": [], "bad_protocols": [], "constraints": [{"text": "has a coding agent", "met": True}]})
+            if kind == "repair": return answer(repair or self.good)
+            return answer(next(it))
+        return f, calls
 
-    def test_a_revision_that_is_not_better_is_not_used_and_bad_input_is_cleaned(self):
-        with mock.patch("litellm.completion", return_value=answer(self.FIRST)): d = c.post(f"/api/projects/{self.pid}/map/draft").json()
-        self.assertFalse(d["revised"]); self.assertIn("Cachescript (service): x", d["text"]); self.assertNotIn("Ghost", d["text"]); self.assertIn("[AWS]", d["text"])
+    def test_three_drafts_are_scored_the_best_is_reviewed_by_another_model_and_repaired(self):
+        f, calls = self.fake([self.poor, self.weak, self.poor])
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        self.assertEqual(len(calls["draft"]), 3); self.assertEqual({k["model"] for k in calls["draft"]}, {"openrouter/anthropic/claude-sonnet-4-5"})
+        self.assertEqual({k["model"] for k in calls["review"]}, {"openrouter/judge:free"})                                      # never the drafter
+        self.assertEqual(d["history"][0]["step"], "drafts"); self.assertEqual(len(d["history"][0]["scores"]), 3)
+        rep = calls["repair"][0]["messages"][0]["content"]; self.assertIn("S3 Secrets come from a secrets manager", rep); self.assertIn("G1", rep)
+        self.assertEqual(d["score"]["parts"]["practice"], 100); self.assertEqual(d["score"]["parts"]["evidence"], 0)      # an empty test library: no evidence
+        self.assertTrue(any(h_["step"] == "repair" for h_ in d["history"])); self.assertIsNone(maps.get(self.pid))
+        p = calls["draft"][0]["messages"][0]["content"]; self.assertIn("OWASP LLM Top 10", p); self.assertIn("S2 Generated code runs in a sandbox", p)
+        saved = c.put(f"/api/projects/{self.pid}/map", json={"text": d["text"]}).json()["map"]
+        self.assertTrue(saved["reviewed"]); self.assertEqual(saved["score"]["total"], d["score"]["total"])                                       # the review travels with the saved lines
 
-    def test_a_busy_main_model_falls_back_to_the_analysis_models_and_private_projects_stay_local(self):
-        db.set_setting("analysis_model", "openrouter/a:free"); db.set_setting("analysis_fallbacks", []); seen = []
-        def fake(**kw):
-            seen.append(kw["model"])
-            if kw["model"] == "openrouter/anthropic/claude-sonnet-4-5": raise RuntimeError("429 rate limit")
-            return answer(self.SECOND)
-        with mock.patch("litellm.completion", side_effect=fake): self.assertEqual(c.post(f"/api/projects/{self.pid}/map/draft").status_code, 200)
-        self.assertEqual(seen[:2], ["openrouter/anthropic/claude-sonnet-4-5", "openrouter/a:free"])
+    def test_a_repair_that_renames_your_parts_or_scores_lower_is_not_used(self):
+        renamed = as_json(maps.to_text(from_good := maps.parse(__import__("tests.test_rules", fromlist=["GOOD"]).GOOD)).replace("Model router", "LLM gateway"))
+        f, calls = self.fake([self.weak, self.weak, self.weak], repair=renamed)
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        self.assertIn("Model router (gateway)", d["text"]); self.assertEqual(d["history"][-1]["step"], "repair rejected")
+        f, calls = self.fake([self.weak, self.weak, self.weak], repair=self.poor)
+        with mock.patch("litellm.completion", side_effect=f): d2 = self.run_draft()
+        self.assertEqual(d2["history"][-1]["step"], "repair rejected"); self.assertGreater(len(maps.parse(d2["text"])["parts"]), 6)
+
+    def test_one_failed_draft_is_fine_and_a_busy_reviewer_doesnt_stop_the_draft(self):
+        it = iter([self.good, RuntimeError("bad json reply"), self.weak])
+        def f(**kw):
+            msg = kw["messages"][0]["content"]
+            if msg.startswith("You review"): raise RuntimeError("429 rate limit")
+            x = next(it, self.good)
+            if isinstance(x, Exception): return NS(choices=[NS(message=NS(content="not json"))], usage=NS(prompt_tokens=1, completion_tokens=1))
+            return answer(x)
+        from types import SimpleNamespace as NS
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        self.assertEqual(len(d["history"][0]["scores"]), 2); self.assertIsNone(d["reviewer"])
+
+    def test_review_on_demand_is_stored_with_the_lines_and_goes_stale_when_they_change(self):
+        from tests.test_rules import GOOD
+        f, calls = self.fake([], review={"implausible": [{"from": "Coding agent", "to": "Harness", "why": "odd"}], "bad_protocols": [], "constraints": []})
+        with mock.patch("litellm.completion", side_effect=f): r = c.post(f"/api/projects/{self.pid}/map/review", json={"text": GOOD}).json()
+        self.assertTrue(r["reviewed"]); self.assertFalse(next(x for x in r["score"]["rules"] if x["id"] == "J1")["ok"])
+        self.assertTrue(c.post(f"/api/projects/{self.pid}/map/preview", json={"text": GOOD + "\n# a comment\n"}).json()["reviewed"])      # same map, same review
+        self.assertFalse(c.post(f"/api/projects/{self.pid}/map/preview", json={"text": GOOD + "Coding agent -> GPUs: runs on\n"}).json()["reviewed"])
+        self.assertEqual(c.post(f"/api/projects/{self.pid}/map/review", json={"text": "A: x\nA -> B"}).status_code, 400)
+        from tests.test_remote import VIA, turn_on, sign_in
+        turn_on(); sign_in(); self.assertEqual(c.post(f"/api/projects/{self.pid}/map/review", json={"text": GOOD}, headers=VIA).status_code, 403)
+
+    def test_private_projects_draft_and_review_locally(self):
         db.x("INSERT INTO project_links(project_id,kind,url,private) VALUES(?,?,?,1)", (self.pid, "github", "https://github.com/me/secret"))
-        with mock.patch("litellm.completion", return_value=answer(self.SECOND)) as comp: c.post(f"/api/projects/{self.pid}/map/draft")
-        self.assertTrue(comp.call_args.kwargs["model"].startswith("ollama"))
+        f, calls = self.fake([self.good] * 3)
+        with mock.patch("litellm.completion", side_effect=f): self.run_draft()
+        self.assertTrue(all(k["model"].startswith("ollama") for k in calls["draft"] + calls["review"]))
 
-    def test_words_no_article_uses_are_sent_back_for_better_ones(self):
-        src = h.add_source("Blog"); a = h.add_article(src, "News", "x" * 600)
-        dev(a, claim="Claude Code adds MCP servers, RBAC and SSO; RouteLLM routes prompts to Bedrock; tracing and evals; vector database support; sandbox runs.")
-        import copy
-        vague = copy.deepcopy(self.SECOND)
-        for part in vague["parts"]: part["terms"] = ["central management"]
-        calls = []
-        def fake(**kw): calls.append(kw); return answer(vague if len(calls) == 1 else self.SECOND)
-        with mock.patch("litellm.completion", side_effect=fake): d = c.post(f"/api/projects/{self.pid}/map/draft").json()
-        self.assertEqual(len(calls), 2); self.assertIn("WORDS NO ARTICLE USES", calls[1]["messages"][0]["content"]); self.assertTrue(d["revised"]); self.assertIn("claude code", d["text"])
-
-    def test_a_revision_that_renames_your_parts_or_borrows_words_is_not_used(self):
-        import copy
-        renamed = copy.deepcopy(self.SECOND); renamed["parts"][1]["name"] = "vLLM"                     # "Model router" renamed to chase matches
-        for x in renamed["connections"]:
-            x["from"] = "vLLM" if x["from"] == "Model router" else x["from"]; x["to"] = "vLLM" if x["to"] == "Model router" else x["to"]
-        with mock.patch("litellm.completion", side_effect=[answer(self.FIRST), answer(renamed)]): d = c.post(f"/api/projects/{self.pid}/map/draft").json()
-        self.assertFalse(d["revised"]); self.assertIn("Model router (gateway)", d["text"])
-        m = maps.parse("A (service): kv cache\nB (service): kv cache, x\nA -> B: y")
-        self.assertEqual(maps.shared_words(m), {"kv cache"}); self.assertIn("Used on more than one part", " ".join(x["text"] for x in patterns.check(m)))
-
-    def test_a_chosen_design_model_is_used(self):
+    def test_a_chosen_design_model_drafts(self):
         db.set_setting("design_model", "openrouter/some/strong-model")
-        with mock.patch("litellm.completion", return_value=answer(self.SECOND)) as comp: d = c.post(f"/api/projects/{self.pid}/map/draft").json()
-        self.assertEqual(comp.call_args.kwargs["model"], "openrouter/some/strong-model"); self.assertEqual(d["model"], "openrouter/some/strong-model")
+        f, calls = self.fake([self.good] * 3)
+        with mock.patch("litellm.completion", side_effect=f): d = self.run_draft()
+        self.assertEqual({k["model"] for k in calls["draft"]}, {"openrouter/some/strong-model"}); self.assertEqual(d["model"], "openrouter/some/strong-model")
 
-    def test_maps_travel_with_a_backup(self): self.assertIn("project_maps", h.api.TABLES)
+    def test_progress_is_reported_and_a_second_start_is_refused_while_running(self):
+        from sw import maps as mp
+        mp.JOBS[self.pid] = {"running": True, "step": "Drafting 3 versions (1 of 3 back)", "started": time.time() - 65, "result": None, "error": None}
+        st = c.get(f"/api/projects/{self.pid}/map/draft/status").json(); self.assertEqual(st["step"], "Drafting 3 versions (1 of 3 back)"); self.assertGreaterEqual(st["elapsed"], 65)
+        self.assertEqual(c.post(f"/api/projects/{self.pid}/map/draft").status_code, 409); mp.JOBS.pop(self.pid)
+        self.assertEqual(c.post("/api/projects/999/map/draft").status_code, 404)
+
+    def test_a_failed_draft_reports_its_error(self):
+        with mock.patch("litellm.completion", side_effect=RuntimeError("401 bad key")), mock.patch.object(h.api, "bg", lambda fn, *a: fn(*a)):
+            c.post(f"/api/projects/{self.pid}/map/draft")
+        st = c.get(f"/api/projects/{self.pid}/map/draft/status", params={"take": True}).json(); self.assertIn("401", st["error"]); self.assertIsNone(st["result"])
+
+    def test_maps_and_reviews_travel_with_a_backup(self): self.assertIn("project_maps", h.api.TABLES); self.assertIn("map_reviews", h.api.TABLES)
 
 
 if __name__ == "__main__":

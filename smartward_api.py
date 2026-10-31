@@ -492,12 +492,30 @@ def map_preview(pid: int, body: dict):
     """The diagram, checks and match counts for lines you are still editing, with problems listed instead of refused. Nothing is saved."""
     return maps.build(pid, str(body.get("text") or ""))
 
-@app.post("/api/projects/{pid}/map/draft")
-def map_draft(pid: int):
-    try: return maps.draft(pid)
+@app.post("/api/projects/{pid}/map/review")
+def map_review(pid: int, body: dict):
+    """Ask the reviewer model about these lines (direction, protocols, the brief's requirements). Nothing is saved but the review itself."""
+    try: return maps.review(pid, str(body.get("text") or ""))
     except LookupError as e: bad(str(e), 404)
     except llm.Unavailable as e: bad(str(e)[:240] + " (try again in a minute)", 503)
     except ValueError as e: bad(str(e))
+
+@app.post("/api/projects/{pid}/map/draft")
+def map_draft(pid: int):
+    """Start drafting (three versions, scored, reviewed, repaired: several minutes). Poll /map/draft/status; nothing is saved."""
+    if not db.q("SELECT 1 FROM projects WHERE id=?", (pid,), one=True): bad("No such project.", 404)
+    if (maps.JOBS.get(pid) or {}).get("running"): bad("A draft is already being made for this project.", 409)
+    maps.JOBS[pid] = {"running": True, "step": "Starting", "started": db.now(), "result": None, "error": None}
+    bg(maps.draft_job, pid); return {"started": True}
+
+@app.get("/api/projects/{pid}/map/draft/status")
+def map_draft_status(pid: int, take: bool = False):
+    """Where the draft is. take=true hands over a finished draft once (so coming back to the page picks it up, but only once)."""
+    j = maps.JOBS.get(pid)
+    if not j: return {"running": False, "step": None, "result": None, "error": None}
+    out = {**j, "elapsed": round(db.now() - j["started"])}
+    if take and not j["running"]: maps.JOBS.pop(pid, None)
+    return out
 
 # ---------- the test bench: claims measured on this laptop, in a sandbox, after approval ----------
 @app.get("/api/bench")
@@ -659,7 +677,7 @@ def project_put(pid: int, body: dict):
 @app.delete("/api/projects/{pid}")
 def project_del(pid: int):
     db.x("DELETE FROM hypothesis_checks WHERE hid IN (SELECT id FROM hypotheses WHERE project_id=?)", (pid,))
-    for t in ("items", "project_links", "brief_history", "hypotheses", "project_maps"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
+    for t in ("items", "project_links", "brief_history", "hypotheses", "project_maps", "map_reviews"): db.x(f"DELETE FROM {t} WHERE project_id=?", (pid,))
     db.x("DELETE FROM projects WHERE id=?", (pid,)); return {"ok": True}
 @app.post("/api/projects/{pid}/suggest")
 def project_suggest(pid: int):
@@ -813,7 +831,7 @@ def lock_verify(body: dict):
     return {"ok": _verify(body.get("pin", ""), st)}
 
 # ---------- export / backup ----------
-TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps", "bench_runs", "removed_sources"]
+TABLES = ["sources", "articles", "chunks", "themes", "mentions", "edges", "projects", "brief_history", "items", "project_links", "conversations", "messages", "usage", "digests", "domains", "developments", "development_runs", "hypotheses", "memos", "hypothesis_checks", "watches", "watch_hits", "project_maps", "bench_runs", "removed_sources", "map_reviews"]
 def _dump(include_private=True, with_blobs=False):
     out = {"version": 1, "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tables": {}}
     private_ids = {r["id"] for r in db.q("SELECT id FROM articles WHERE private=1")}
